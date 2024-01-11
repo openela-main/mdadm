@@ -138,7 +138,13 @@ do
 		echo $a > $fl
 		any=yes
 	done
-	if [ -z "$any" ]; then exit 0; fi
+	if [ -z "$any" ]; then
+		#mdcheck_continue.timer is started by mdcheck_start.timer.
+		#When he check action can be finished in mdcheck_start.service,
+		#it doesn't need mdcheck_continue anymore.
+		systemctl stop mdcheck_continue.timer
+		exit 0;
+	fi
 	sleep 120
 done
 
