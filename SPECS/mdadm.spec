@@ -1,7 +1,7 @@
 Name:        mdadm
 Version:     4.2
 # extraversion is used to define rhel internal version
-%define extraversion 9
+%define extraversion 12
 Release:     %{extraversion}%{?dist}
 Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 URL:         http://www.kernel.org/pub/linux/utils/raid/mdadm/
@@ -144,13 +144,52 @@ Patch121:    0122-mdadm-define-DEV_NUM_PREF.patch
 Patch122:    0123-mdadm-define-is_devname_ignore.patch
 Patch123:    0124-mdadm-numbered-names-verification.patch
 Patch124:    0125-enable-RAID-for-SATA-under-VMD.patch
+Patch125:    0126-imsm-Fix-possible-segfault-in-check_no_platform.patch
+Patch126:    0127-imsm-move-sum_extents-calculations-to-merge_extents.patch
+Patch127:    0128-imsm-imsm_get_free_size-refactor.patch
+Patch128:    0129-imsm-introduce-round_member_size_to_mb.patch
+Patch129:    0130-imsm-move-expand-verification-code-into-new-function.patch
+Patch130:    0131-imsm-return-free-space-after-volume-for-expand.patch
+Patch131:    0132-imsm-fix-free-space-calculations.patch
+Patch132:    0133-Add-secure-gethostname-wrapper.patch
+Patch133:    0134-mdadm-Stop-mdcheck_continue-timer-when-mdcheck_start.patch
+Patch134:    0135-Fix-memory-leak-in-file-Assemble.patch
+Patch135:    0136-Fix-memory-leak-in-file-Kill.patch
+Patch136:    0137-Fix-memory-leak-in-file-Manage.patch
+Patch137:    0138-Fix-memory-leak-in-file-mdadm.patch
+Patch138:    0139-Fix-unsafe-string-functions.patch
+Patch139:    0140-platform-intel-limit-guid-length.patch
+Patch140:    0141-imsm-Add-reading-vmd-register-for-finding-imsm-capab.patch
+Patch141:    0142-Add-compiler-defenses-flags.patch
+Patch142:    0143-Assemble-fix-redundant-memory-free.patch
+Patch143:    0144-tests-add-a-new-test-for-rdev-lifetime.patch
+Patch144:    0145-tests-support-to-skip-checking-dmesg.patch
+Patch145:    0146-tests-add-a-regression-test-for-raid10-deadlock.patch
+Patch146:    0147-tests-add-a-regression-test-for-raid456-deadlock.patch
+Patch147:    0148-tests-add-a-regression-test-that-raid456-can-t-assem.patch
+Patch148:    0149-tests-add-a-regression-test-that-raid456-can-t-assem.patch
+Patch149:    0150-tests-add-a-regression-test-that-reshape-can-corrupt.patch
+Patch150:    0151-tests-add-a-regression-test-for-raid456-deadlock-aga.patch
+Patch151:    0152-tests-create-names_template.patch
+Patch152:    0153-tests-create-00confnames.patch
+Patch153:    0154-mdadm-set-ident.devname-if-applicable.patch
+Patch154:    0155-mdadm-refactor-ident-name-handling.patch
+Patch155:    0156-mdadm-define-ident_set_devname.patch
+Patch156:    0157-mdadm-Follow-POSIX-Portable-Character-Set.patch
+Patch157:    0158-Incremental-remove-obsoleted-calls-to-udisks.patch
+Patch158:    0159-mdadm-tests-Fix-regular-expression-failure.patch
+Patch159:    0160-Fix-race-of-mdadm-add-and-mdadm-incremental.patch
+Patch160:    0161-mdadm-tests-Don-t-run-mknod-before-losetup.patch
+Patch161:    0162-mdadm-ddf-Abort-when-raid-disk-is-smaller-in-getinfo.patch
+Patch162:    0163-mdadm-super1-Add-MD_FEATURE_RAID0_LAYOUT-if-kernel-5.patch
+Patch163:    0164-mdadm-remove-container_enough-logic.patch
+Patch164:    0165-Fix-assembling-RAID-volume-by-using-incremental.patch
+Patch165:    0166-Revert-mdadm-remove-container_enough-logic.patch
 
 # Fedora customization patches
 
 Patch200:    mdadm-udev.patch
 Patch201:    mdadm-2.5.2-static.patch
-# Build without -Werror.
-Patch202:    disable-Werror.patch
 
 BuildRequires: make
 BuildRequires: systemd-rpm-macros binutils-devel gcc systemd-devel
@@ -224,6 +263,18 @@ install -m644 %{SOURCE5} %{buildroot}/etc/libreport/events.d
 /usr/share/mdadm/mdcheck
 
 %changelog
+* Wed Mar 20 2024 Xiao Ni <xni@redhat.com> 4.2-12
+- To fix errata/osci problems
+- Resolves RHEL-26272
+
+* Fri Mar 15 2024 Xiao Ni <xni@redhat.com> 4.2-11
+- revert "mdadm: remove container_enough logic"
+- Resolves RHEL-26272
+
+* Fri Nov 3 2023 Xiao Ni <xni@redhat.com> - 4.2-10
+- Update to latest upstream
+- Resolves RHEL-15386
+
 * Tue May 16 2023 Xiao Ni <xni@redhat.com> - 4.2-9
 - Update to latest upstream and fix mdcheck service bug
 - Resolves rhbz#2159923, rhbz#2150865, rhbz#2124071, rhbz#2203859
