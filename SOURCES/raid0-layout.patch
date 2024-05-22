@@ -1,0 +1,12 @@
+--- mdadm/super1-orig.c	2023-11-10 19:27:25.262178162 +0800
++++ mdadm/super1.c	2023-11-10 19:28:25.991441827 +0800
+@@ -1988,8 +1988,7 @@
+ 	long bm_offset;
+ 	bool raid0_need_layout = false;
+ 
+-	/* Since linux kernel v5.4, raid0 always has a layout */
+-	if (has_raid0_layout(sb) && get_linux_version() >= 5004000)
++	if (has_raid0_layout(sb))
+ 		raid0_need_layout = true;
+ 
+ 	for (di = st->info; di; di = di->next) {
