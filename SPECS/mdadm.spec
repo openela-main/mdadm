@@ -1,7 +1,7 @@
 Name:        mdadm
 Version:     4.2
 # extraversion is used to define rhel internal version
-%define extraversion 12
+%define extraversion 14
 Release:     %{extraversion}%{?dist}
 Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 URL:         http://www.kernel.org/pub/linux/utils/raid/mdadm/
@@ -185,6 +185,10 @@ Patch162:    0163-mdadm-super1-Add-MD_FEATURE_RAID0_LAYOUT-if-kernel-5.patch
 Patch163:    0164-mdadm-remove-container_enough-logic.patch
 Patch164:    0165-Fix-assembling-RAID-volume-by-using-incremental.patch
 Patch165:    0166-Revert-mdadm-remove-container_enough-logic.patch
+Patch166:    0167-manage-adjust-checking-subarray-state-in-update_suba.patch
+Patch167:    0168-Grow-Move-update_tail-assign-to-Grow_reshape.patch
+Patch168:    0169-util.c-change-devnm-to-const-in-mdmon-functions.patch
+Patch169:    0170-Wait-for-mdmon-when-it-is-stared-via-systemd.patch
 
 # Fedora customization patches
 
@@ -263,6 +267,14 @@ install -m644 %{SOURCE5} %{buildroot}/etc/libreport/events.d
 /usr/share/mdadm/mdcheck
 
 %changelog
+* Mon Jul 15 2024 Xiao Ni <xni@redhat.com> 4.2-14
+- IMSM raid0 can't grow
+- Resolves RHEL-39990
+
+* Tue Apr 30 2024 Xiao Ni <xni@redhat.com> 4.2-13
+- consistency-policy cannot be changed on active volume
+- Resolves RHEL-34763
+
 * Wed Mar 20 2024 Xiao Ni <xni@redhat.com> 4.2-12
 - To fix errata/osci problems
 - Resolves RHEL-26272
