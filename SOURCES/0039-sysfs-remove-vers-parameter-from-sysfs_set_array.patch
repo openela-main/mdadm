@@ -1,0 +1,87 @@
+From de23e12a39cfc94575e1173293fe9e15337ee999 Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Mon, 18 Mar 2024 16:53:31 +0100
+Subject: [PATCH 39/41] sysfs: remove vers parameter from sysfs_set_array
+
+9003 was passed directly to sysfs_set_array() since md_get_version()
+always returned this value. md_get_version() was removed long ago.
+
+Remove dead version check from sysfs_set_array().
+Remove "vers" argument and fix function calls.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Assemble.c | 2 +-
+ mdadm.h    | 2 +-
+ sysfs.c    | 6 ++----
+ util.c     | 3 +--
+ 4 files changed, 5 insertions(+), 8 deletions(-)
+
+diff --git a/Assemble.c b/Assemble.c
+index 9d042055..f6c5b99e 100644
+--- a/Assemble.c
++++ b/Assemble.c
+@@ -1988,7 +1988,7 @@ int assemble_container_content(struct supertype *st, int mdfd,
+ 	 * and ignoring special character on the first place.
+ 	 */
+ 	if (strcmp(sra->text_version + 1, content->text_version + 1) != 0) {
+-		if (sysfs_set_array(content, 9003) != 0) {
++		if (sysfs_set_array(content) != 0) {
+ 			sysfs_free(sra);
+ 			return 1;
+ 		}
+diff --git a/mdadm.h b/mdadm.h
+index a363708a..ae2106a2 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -811,7 +811,7 @@ extern int sysfs_attribute_available(struct mdinfo *sra, struct mdinfo *dev,
+ extern int sysfs_get_str(struct mdinfo *sra, struct mdinfo *dev,
+ 			 char *name, char *val, int size);
+ extern int sysfs_set_safemode(struct mdinfo *sra, unsigned long ms);
+-extern int sysfs_set_array(struct mdinfo *info, int vers);
++extern int sysfs_set_array(struct mdinfo *info);
+ extern int sysfs_add_disk(struct mdinfo *sra, struct mdinfo *sd, int resume);
+ extern int sysfs_disk_to_scsi_id(int fd, __u32 *id);
+ extern int sysfs_unique_holder(char *devnm, long rdev);
+diff --git a/sysfs.c b/sysfs.c
+index 230b842e..4ded1672 100644
+--- a/sysfs.c
++++ b/sysfs.c
+@@ -678,7 +678,7 @@ int sysfs_set_safemode(struct mdinfo *sra, unsigned long ms)
+ 	return sysfs_set_str(sra, NULL, "safe_mode_delay", delay);
+ }
+ 
+-int sysfs_set_array(struct mdinfo *info, int vers)
++int sysfs_set_array(struct mdinfo *info)
+ {
+ 	int rv = 0;
+ 	char ver[100];
+@@ -702,9 +702,7 @@ int sysfs_set_array(struct mdinfo *info, int vers)
+ 			if (strlen(buf) >= 9 && buf[9] == '-')
+ 				ver[9] = '-';
+ 
+-		if ((vers % 100) < 2 ||
+-		    sysfs_set_str(info, NULL, "metadata_version",
+-				  ver) < 0) {
++		if (sysfs_set_str(info, NULL, "metadata_version", ver) < 0) {
+ 			pr_err("This kernel does not support external metadata.\n");
+ 			return 1;
+ 		}
+diff --git a/util.c b/util.c
+index 03336d6f..9e837045 100644
+--- a/util.c
++++ b/util.c
+@@ -1867,8 +1867,7 @@ int set_array_info(int mdfd, struct supertype *st, struct mdinfo *info)
+ 	int rv;
+ 
+ 	if (st->ss->external)
+-		return sysfs_set_array(info, 9003);
+-		
++		return sysfs_set_array(info);
+ 	memset(&inf, 0, sizeof(inf));
+ 	inf.major_version = info->array.major_version;
+ 	inf.minor_version = info->array.minor_version;
+-- 
+2.40.1
+

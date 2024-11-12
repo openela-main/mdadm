@@ -1,0 +1,30 @@
+From a0174749426f49a04f11ae0e728cb0a681bfa465 Mon Sep 17 00:00:00 2001
+From: Yu Kuai <yukuai3@huawei.com>
+Date: Thu, 9 May 2024 09:10:59 +0800
+Subject: [PATCH 64/69] tests/23rdev-lifetime: fix a typo
+
+"pill" was wrong, while it should be "kill", test will still pass while
+test thread will not be cleaned up.
+
+Signed-off-by: Yu Kuai <yukuai3@huawei.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ tests/23rdev-lifetime | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/23rdev-lifetime b/tests/23rdev-lifetime
+index 1750b0db..03b61de4 100644
+--- a/tests/23rdev-lifetime
++++ b/tests/23rdev-lifetime
+@@ -4,7 +4,7 @@ pid=""
+ runtime=2
+ 
+ clean_up_test() {
+-	pill -9 $pid
++	kill -9 $pid
+ 	echo clear > /sys/block/md0/md/array_state
+ }
+ 
+-- 
+2.41.0
+

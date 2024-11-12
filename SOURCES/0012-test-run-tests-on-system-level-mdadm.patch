@@ -1,0 +1,138 @@
+From 4c12714d1ca06533fe7a887966df2558fd2f96b2 Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Tue, 20 Feb 2024 17:04:44 +0100
+Subject: [PATCH 12/41] test: run tests on system level mdadm
+
+The tests run with MDADM_NO_SYSTEMCTL flag by default, however it has
+no effect on udev. In case of external metadata, even if flag is set,
+udev will trigger systemd to launch mdmon.
+
+This commit changes test execution level, so the tests are run on system
+level mdadm, meaning local build must be installed prior to running
+tests.
+
+Add warning that the tests are run on system level mdadm and local
+build must be installed first.
+
+Do not call mdadm with "quiet" as it makes it not display critical
+messages necessary for debug.
+
+Remove forcing speed_limit and add restoring system speed_limit_max
+after test execution.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ test          | 27 ++++++++++++++++++---------
+ tests/func.sh |  1 -
+ 2 files changed, 18 insertions(+), 10 deletions(-)
+
+diff --git a/test b/test
+index 49a36c3b..338c2db4 100755
+--- a/test
++++ b/test
+@@ -1,11 +1,12 @@
+ #!/bin/bash
+ #
+ # run test suite for mdadm
+-mdadm=$PWD/mdadm
++mdadm=`which mdadm`
+ targetdir="/var/tmp"
+ logdir="$targetdir"
+ config=/tmp/mdadm.conf
+ testdir=$PWD/tests
++system_speed_limit=`cat /proc/sys/dev/raid/speed_limit_max`
+ devlist=
+ 
+ savelogs=0
+@@ -20,9 +21,6 @@ DEVTYPE=loop
+ INTEGRITY=yes
+ LVM_VOLGROUP=mdtest
+ 
+-# make sure to test local mdmon, not system one
+-export MDADM_NO_SYSTEMCTL=1
+-
+ # assume md0, md1, md2 exist in /dev
+ md0=/dev/md0
+ md1=/dev/md1
+@@ -41,7 +39,10 @@ ctrl_c() {
+ 	ctrl_c_error=1
+ }
+ 
+-# mdadm always adds --quiet, and we want to see any unexpected messages
++restore_system_speed_limit() {
++	echo $system_speed_limit > /proc/sys/dev/raid/speed_limit_max
++}
++
+ mdadm() {
+ 	rm -f $targetdir/stderr
+ 	case $* in
+@@ -63,10 +64,10 @@ mdadm() {
+ 					$mdadm --zero $args > /dev/null
+ 			}
+ 		done
+-		$mdadm 2> $targetdir/stderr --quiet "$@" --auto=yes
++		$mdadm 2> $targetdir/stderr "$@" --auto=yes
+ 		;;
+ 	* )
+-		$mdadm 2> $targetdir/stderr --quiet "$@"
++		$mdadm 2> $targetdir/stderr "$@"
+ 		;;
+ 	esac
+ 	rv=$?
+@@ -99,8 +100,6 @@ do_test() {
+ 		fi
+ 
+ 		rm -f $targetdir/stderr
+-		# this might have been reset: restore the default.
+-		echo 2000 > /proc/sys/dev/raid/speed_limit_max
+ 		do_clean
+ 		# source script in a subshell, so it has access to our
+ 		# namespace, but cannot change it.
+@@ -122,6 +121,7 @@ do_test() {
+ 				echo "  (KNOWN BROKEN TEST: $_broken_msg)"
+ 			fi
+ 		fi
++		restore_system_speed_limit
+ 		[ "$savelogs" == "1" ] &&
+ 			mv -f $targetdir/log $logdir/$_basename.log
+ 		[ "$ctrl_c_error" == "1" ] && exit 1
+@@ -299,7 +299,15 @@ parse_args() {
+ 	done
+ }
+ 
++print_warning() {
++	cat <<-EOF
++	Warning! Tests are performed on system level mdadm!
++	If you want to test local build, you need to install it first!
++	EOF
++}
++
+ main() {
++	print_warning
+ 	do_setup
+ 
+ 	echo "Testing on linux-$(uname -r) kernel"
+@@ -329,6 +337,7 @@ main() {
+ 			break
+ 		fi
+ 	done
++
+ 	exit 0
+ }
+ 
+diff --git a/tests/func.sh b/tests/func.sh
+index 1c1a28a2..b474442b 100644
+--- a/tests/func.sh
++++ b/tests/func.sh
+@@ -213,7 +213,6 @@ do_setup() {
+ 	path1=$dev7
+ 	ulimit -c unlimited
+ 	[ -f /proc/mdstat ] || modprobe md_mod
+-	echo 2000 > /proc/sys/dev/raid/speed_limit_max
+ 	echo 0 > /sys/module/md_mod/parameters/start_ro
+ }
+ 
+-- 
+2.40.1
+

@@ -1,0 +1,36 @@
+From 5be749ce416852e7acbb2415be380be358859612 Mon Sep 17 00:00:00 2001
+From: Kinga Stefaniuk <kinga.stefaniuk@intel.com>
+Date: Tue, 23 Jul 2024 15:38:41 +0200
+Subject: [PATCH 1/1] Detail: fix --detail --export for uuid_zero
+
+Mentioned commit (see Fixes) causes that devices with UUID
+equal to uuid_zero was not recognized properly. For few devices
+the first one was taken always, and the same information was
+printed. It caused regression, when few containers were created,
+symlinks were generated only for the first one.
+
+Add checking if uuid is uuid_zero and, if yes, use devname to
+differentiate devices.
+
+Fixes: 60c19530dd7c ("Detail: remove duplicated code")
+Signed-off-by: Kinga Stefaniuk <kinga.stefaniuk@intel.com>
+---
+ Detail.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Detail.c b/Detail.c
+index 55a086d3..f8b9e847 100644
+--- a/Detail.c
++++ b/Detail.c
+@@ -274,7 +274,7 @@ int Detail(char *dev, struct context *c)
+ 				       array.minor_version);
+ 		}
+ 
+-		if (info)
++		if (info && memcmp(info->uuid, uuid_zero, sizeof(int[4])) != 0)
+ 			mp = map_by_uuid(&map, info->uuid);
+ 		if (!mp)
+ 			mp = map_by_devnm(&map, fd2devnm(fd));
+-- 
+2.41.0
+
