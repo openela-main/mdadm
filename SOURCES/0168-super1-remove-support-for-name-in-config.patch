@@ -1,0 +1,267 @@
+From dcc22ae74a864358b812327a423435b541789a36 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Thu, 1 Feb 2024 12:32:41 +0100
+Subject: [PATCH 1/1] super1: remove support for name= in config
+
+Only super1 provides "name=" to config. It is recoreded in metadata
+so there is no need to duplicate same information.
+UUID is our main key.
+
+It is not used by Incremental and Assemble handles empty name well
+because other supertypes don't set it in conf.
+
+Expectation that the name in config is same as in metadata is bug prone.
+Config should be the place where use can define customized settings.
+
+Remove printing "name=" from mdadm config creation commands. Ignore
+the name in config file to keep backward compatibility. Remove
+description from man mdadm.conf.
+
+Update 00conftest because "name" is no longer accepted.
+As the name is ignored, error for mdadm --detail is not printed.
+
+Reported-by: Stefan Fleischmann <sfle@kth.se>
+Fixes: e2eb503bd797 ("mdadm: Follow POSIX Portable Character Set")
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ config.c                       | 12 ++----
+ mdadm.conf.5.in                |  7 ---
+ super1.c                       |  8 ----
+ tests/00confnames              | 79 ++++++----------------------------
+ tests/templates/names_template |  7 +--
+ 5 files changed, 19 insertions(+), 94 deletions(-)
+
+diff --git a/config.c b/config.c
+index 9a04cae8..44f7dd2f 100644
+--- a/config.c
++++ b/config.c
+@@ -262,6 +262,7 @@ pass:
+  * @cmdline: context dependent actions.
+  *
+  * If criteria passed, set name in @ident.
++ * Note: name is not used by config file, it for cmdline only.
+  *
+  * Return: %MDADM_STATUS_SUCCESS or %MDADM_STATUS_ERROR.
+  */
+@@ -571,7 +572,8 @@ void arrayline(char *line)
+ 					mis.super_minor = minor;
+ 			}
+ 		} else if (strncasecmp(w, "name=", 5) == 0) {
+-			_ident_set_name(&mis, w + 5, false);
++			/* Ignore name in confile */
++			continue;
+ 		} else if (strncasecmp(w, "bitmap=", 7) == 0) {
+ 			if (mis.bitmap_file)
+ 				pr_err("only specify bitmap file once. %s ignored\n",
+@@ -1279,13 +1281,7 @@ struct mddev_ident *conf_match(struct supertype *st,
+ 				       array_list->devname);
+ 			continue;
+ 		}
+-		if (array_list->name[0] &&
+-		    strcasecmp(array_list->name, info->name) != 0) {
+-			if (verbose >= 2 && array_list->devname)
+-				pr_err("Name differs from %s.\n",
+-				       array_list->devname);
+-			continue;
+-		}
++
+ 		if (array_list->devices && devname &&
+ 		    !match_oneof(array_list->devices, devname)) {
+ 			if (verbose >= 2 && array_list->devname)
+diff --git a/mdadm.conf.5.in b/mdadm.conf.5.in
+index 94e23dd0..787e51e9 100644
+--- a/mdadm.conf.5.in
++++ b/mdadm.conf.5.in
+@@ -133,13 +133,6 @@ The value should be a 128 bit uuid in hexadecimal, with punctuation
+ interspersed if desired.  This must match the uuid stored in the
+ superblock.
+ .TP
+-.B name=
+-The value should be a simple textual name as was given to
+-.I mdadm
+-when the array was created.  This must match the name stored in the
+-superblock on a device for that device to be included in the array.
+-Not all superblock formats support names.
+-.TP
+ .B super\-minor=
+ The value is an integer which indicates the minor number that was
+ stored in the superblock when the array was created. When an array is
+diff --git a/super1.c b/super1.c
+index dfde4629..5fd2228e 100644
+--- a/super1.c
++++ b/super1.c
+@@ -645,10 +645,6 @@ static void brief_examine_super1(struct supertype *st, int verbose)
+ 			printf(":");
+ 		printf("%02x", sb->set_uuid[i]);
+ 	}
+-	if (sb->set_name[0]) {
+-		printf(" name=");
+-		print_quoted(sb->set_name);
+-	}
+ 	printf("\n");
+ }
+ 
+@@ -875,10 +871,6 @@ static void brief_detail_super1(struct supertype *st, char *subarray)
+ 	struct mdp_superblock_1 *sb = st->sb;
+ 	int i;
+ 
+-	if (sb->set_name[0]) {
+-		printf(" name=");
+-		print_quoted(sb->set_name);
+-	}
+ 	printf(" UUID=");
+ 	for (i = 0; i < 16; i++) {
+ 		if ((i & 3) == 0 && i != 0)
+diff --git a/tests/00confnames b/tests/00confnames
+index 10823f01..191a905f 100644
+--- a/tests/00confnames
++++ b/tests/00confnames
+@@ -1,10 +1,8 @@
+ set -x -e
+ . tests/templates/names_template
+ 
+-# Test how <devname> and <name> from config are handled during Incremental assemblation.
+-# 1-6 <devnode> only tests (no <name> in config).
+-# 6-10 <devname> and <name> combinations are tested.
+-# 11-13 corner cases.
++# Test how <devname> is handled during Incremental assemblation with
++# config file and ARRAYLINE specified.
+ 
+ names_create "/dev/md/name"
+ local _UUID="$(mdadm -D --export /dev/md127 | grep MD_UUID | cut -d'=' -f2)"
+@@ -12,96 +10,47 @@ local _UUID="$(mdadm -D --export /dev/md127 | grep MD_UUID | cut -d'=' -f2)"
+ 
+ 
+ # 1. <devname> definition consistent with metadata name.
+-names_make_conf $_UUID "/dev/md/name" "empty" $config
++names_make_conf $_UUID "/dev/md/name" $config
+ mdadm -S "/dev/md127"
+ mdadm -I $dev0 --config=$config
+ names_verify "/dev/md127" "name" "name"
+ mdadm -S "/dev/md127"
+ 
+ # 2. Same as 1, but use short name form of <devname>.
+-names_make_conf $_UUID "name" "empty" $config
++names_make_conf $_UUID "name" $config
+ mdadm -I $dev0 --config=$config
+ names_verify "/dev/md127" "name" "name"
+ mdadm -S "/dev/md127"
+ 
+ # 3. Same as 1, but use different <devname> than metadata provides.
+-names_make_conf $_UUID "/dev/md/other" "empty" $config
++names_make_conf $_UUID "/dev/md/other" $config
+ mdadm -I $dev0 --config=$config
+ names_verify "/dev/md127" "other" "name"
+ mdadm -S "/dev/md127"
+ 
+ # 4. Same as 3, but use short name form of <devname>.
+-names_make_conf $_UUID "other" "empty" $config
++names_make_conf $_UUID "other" $config
+ mdadm -I $dev0 --config=$config
+ names_verify "/dev/md127" "other" "name"
+ mdadm -S "/dev/md127"
+ 
+-# 5. Force particular node creation by setting <devname> to /dev/mdX. Link is not created in this
+-# case.
+-names_make_conf $_UUID "/dev/md4" "empty" $config
++# 5. Force particular node creation by setting <devname> to /dev/mdX.
++# Link is not created in this case.
++names_make_conf $_UUID "/dev/md4" $config
+ mdadm -I $dev0 --config=$config
+ names_verify "/dev/md4" "empty" "name"
+ mdadm -S "/dev/md4"
+ 
+-# 6. <devname> set to /dev/mdX, <name> same as in metadata.
+-# Metadata name and default node used - controversial. Current behavior documented.
+-names_make_conf $_UUID "/dev/md22" "name" $config
+-mdadm -I $dev0 --config=$config
+-names_verify "/dev/md127" "name" "name"
+-mdadm -S "/dev/md127"
+-
+-# 7. <devname> set to /dev/mdX, <name> different than in metadata.
+-# Metadata name and default node used - controversial. Current behavior documented.
+-names_make_conf $_UUID "/dev/md8" "other" $config
+-mdadm -I $dev0 --config=$config
+-names_verify "/dev/md127" "name" "name"
+-mdadm -S "/dev/md127"
+-
+-# 8. Both <devname> and <name> different than in metadata.
+-# Metadata name and default node used - controversial. Current behavior documented.
+-names_make_conf $_UUID "devnode" "other_name" $config
+-mdadm -I $dev0 --config=$config
+-names_verify "/dev/md127" "name" "name"
+-mdadm -S "/dev/md127"
+-
+-# 9. <devname> set to metadata name, <name> different than in metadata.
+-# Metadata name and default node used - controversial. Current behavior documented.
+-names_make_conf $_UUID "name" "other_name" $config
+-mdadm -I $dev0 --config=$config
+-names_verify "/dev/md127" "name" "name"
+-mdadm -S "/dev/md127"
+-
+-# 10. Bad <devname> set, no <name>.
+-# Metadata name and default node used - expected.
+-names_make_conf $_UUID "/im/bad/devname" "empty" $config
+-mdadm -I $dev0 --config=$config
+-names_verify "/dev/md127" "name" "name"
+-mdadm -S "/dev/md127"
+-
+-# 11. <devname> with some special symbols and locales, no <name>.
++# 6. <devname> with some special symbols and locales.
+ # <devname> should be ignored.
+-names_make_conf $_UUID "tźż-\.,<>st+-" "empty" $config
+-mdadm -I $dev0 --config=$config
+-names_verify "/dev/md127" "name" "name"
+-mdadm -S "/dev/md127"
+-
+-# 12. No <devname> and <name> set.
+-# Metadata name and default node used - expected.
+-names_make_conf $_UUID "empty" "empty" $config
+-mdadm -I $dev0 --config=$config
+-names_verify "/dev/md127" "name" "name"
+-mdadm -S "/dev/md127"
+-
+-# 13. No <devname>, <name> set to /dev/mdX.
+-# Entry should be ignored, it is not ignored but result is good anyway.
+-names_make_conf $_UUID "empty" "/dev/md12" $config
++names_make_conf $_UUID "tźż-\.,<>st+-" $config
+ mdadm -I $dev0 --config=$config
+ names_verify "/dev/md127" "name" "name"
+ mdadm -S "/dev/md127"
+ 
+-# 13. No <devname>, <name> with special symbols and locales.
+-# Entry should be ignored, it is not ignored but result is good anyway.
+-names_make_conf $_UUID "empty" "./\śćń#&" $config
++# 7. No <devname> set.
++# Metadata name and default node used.
++names_make_conf $_UUID "empty" $config
+ mdadm -I $dev0 --config=$config
+ names_verify "/dev/md127" "name" "name"
+ mdadm -S "/dev/md127"
+diff --git a/tests/templates/names_template b/tests/templates/names_template
+index 6181bfaa..1b6cd14b 100644
+--- a/tests/templates/names_template
++++ b/tests/templates/names_template
+@@ -63,8 +63,7 @@ function names_verify() {
+ names_make_conf() {
+ 	local UUID="$1"
+ 	local WANTED_DEVNAME="$2"
+-	local WANTED_NAME="$3"
+-	local CONF="$4"
++	local CONF="$3"
+ 
+ 	local LINE="ARRAY metadata=1.2 UUID=$UUID"
+ 
+@@ -72,9 +71,5 @@ names_make_conf() {
+ 		LINE="$LINE $WANTED_DEVNAME"
+ 	fi
+ 
+-	if [[ "$WANTED_NAME" != "empty" ]]; then
+-		LINE="$LINE name=$WANTED_NAME"
+-	fi
+-
+ 	echo $LINE > $CONF
+ }
+-- 
+2.41.0
+

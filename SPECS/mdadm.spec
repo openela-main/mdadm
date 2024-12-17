@@ -2,7 +2,7 @@ Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 Name:        mdadm
 Version:     4.2
 # extraversion is used to define rhel internal version
-%define extraversion 14
+%define extraversion 16
 Release:     %{extraversion}%{?dist}
 Source:      http://www.kernel.org/pub/linux/utils/raid/mdadm/mdadm-%{version}%{?subversion:-%{subversion}}.tar.xz
 Source1:     mdmonitor.init
@@ -180,6 +180,8 @@ Patch162:    0163-mdadm-super1-Add-MD_FEATURE_RAID0_LAYOUT-if-kernel-5.patch
 Patch163:    0164-mdadm-remove-container_enough-logic.patch
 Patch164:    0165-Fix-assembling-RAID-volume-by-using-incremental.patch
 Patch165:    0166-Revert-mdadm-remove-container_enough-logic.patch
+Patch166:    0167-manage-adjust-checking-subarray-state-in-update_suba.patch
+Patch167:    0168-super1-remove-support-for-name-in-config.patch
 
 # RHEL customization patches
 Patch200:    mdadm-udev.patch
@@ -274,6 +276,14 @@ rm -rf %{buildroot}
 /usr/share/mdadm/mdcheck
 
 %changelog
+* Mon Oct 28 2024 Xiao Ni <xni@redhat.com> - 4.2-16
+- Remove name= support in config file
+- Resolves RHEL-45608
+
+* Thu Mar 28 2024 Xiao Ni <xni@redhat.com> - 4.2-15
+- Fix update_subarray on active volume - missing patch
+- Resolves RHEL-20833
+
 * Fri Mar 15 2024 Xiao Ni <xni@redhat.com> - 4.2-14
 - Revert "mdadm: remove container_enough logic"
 - Resolves RHEL-26274
