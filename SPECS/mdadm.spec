@@ -1,7 +1,7 @@
 Name:        mdadm
 Version:     4.3
 # extraversion is used to define rhel internal version
-%define extraversion 3
+%define extraversion 4
 Release:     %{extraversion}%{?dist}
 Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 URL:         http://www.kernel.org/pub/linux/utils/raid/mdadm/
@@ -87,6 +87,7 @@ Patch064:    0065-util.c-change-devnm-to-const-in-mdmon-functions.patch
 Patch065:    0066-Wait-for-mdmon-when-it-is-stared-via-systemd.patch
 Patch066:    0069-mdadm-Fix-compilation-for-32-bit-arch.patch
 Patch067:    0070-Detail-fix-detail-export-for-uuid_zero.patch
+Patch068:    0071-mdadm-Increase-number-limit-in-md-device-name-to-102.patch
 
 # Fedora customization patches
 
@@ -165,6 +166,10 @@ install -m644 %{SOURCE5} %{buildroot}/etc/libreport/events.d
 /usr/share/mdadm/mdcheck
 
 %changelog
+* Mon Dec 16 2024 Xiao Ni <xni@redhat.com> 4.3-4
+- Increase number limit in md device name to 1024
+- Resolves RHEL-71365
+
 * Sun Aug 11 2024 Xiao Ni <xni@redhat.com> 4.3-3
 - /dev/md symlink not created for second RAID container
 - Resolves RHEL-50456
