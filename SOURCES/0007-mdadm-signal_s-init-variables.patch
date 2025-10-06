@@ -1,0 +1,35 @@
+From 38cb95dd28fa790ae6d90b169f1fd2b1d09a02f2 Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Tue, 20 Feb 2024 11:56:08 +0100
+Subject: [PATCH 07/41] mdadm: signal_s() init variables
+
+Init sigaction structs in signal_s().
+This approach might throw warnings for GCC 4.x and lower.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ mdadm.h | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/mdadm.h b/mdadm.h
+index 1f28b3e7..75c887e4 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -1856,11 +1856,10 @@ static inline char *to_subarray(struct mdstat_ent *ent, char *container)
+  */
+ static inline sighandler_t signal_s(int sig, sighandler_t handler)
+ {
+-	struct sigaction new_act;
+-	struct sigaction old_act;
++	struct sigaction new_act = {0};
++	struct sigaction old_act = {0};
+ 
+ 	new_act.sa_handler = handler;
+-	new_act.sa_flags = 0;
+ 
+ 	if (sigaction(sig, &new_act, &old_act) == 0)
+ 		return old_act.sa_handler;
+-- 
+2.40.1
+

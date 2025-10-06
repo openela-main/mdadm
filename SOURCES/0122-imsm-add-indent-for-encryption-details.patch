@@ -1,0 +1,28 @@
+From f8274feea5c63300e893109840943513df924da2 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Mon, 15 Jul 2024 12:21:19 +0200
+Subject: [PATCH 122/157] imsm: add indent for encryption details
+
+Improve readability of the output.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ super-intel.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/super-intel.c b/super-intel.c
+index ef3f5da1..713bfccf 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -2318,7 +2318,7 @@ void print_encryption_information(int disk_fd, enum sys_dev_type hba_type)
+ {
+ 	struct encryption_information information = {0};
+ 	mdadm_status_t status = MDADM_STATUS_SUCCESS;
+-	const char *indent = "                  ";
++	const char *indent = "                    ";
+ 
+ 	switch (hba_type) {
+ 	case SYS_DEV_VMD:
+-- 
+2.41.0
+

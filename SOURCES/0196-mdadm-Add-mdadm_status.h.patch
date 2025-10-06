@@ -1,0 +1,85 @@
+From f2f938b0b2755bb2c558eef87f5767beb2ff2ca1 Mon Sep 17 00:00:00 2001
+From: Anna Sztukowska <anna.sztukowska@intel.com>
+Date: Wed, 9 Oct 2024 08:14:05 +0200
+Subject: [PATCH 196/201] mdadm: Add mdadm_status.h
+
+Move mdadm_status_t to mdadm_status.h file. Add status for memory
+allocation failure.
+
+Signed-off-by: Anna Sztukowska <anna.sztukowska@intel.com>
+---
+ mdadm.h        |  7 +------
+ mdadm_status.h | 13 +++++++++++++
+ xmalloc.c      |  4 ++--
+ 3 files changed, 16 insertions(+), 8 deletions(-)
+ create mode 100644 mdadm_status.h
+
+diff --git a/mdadm.h b/mdadm.h
+index bbc1b97f..5781948e 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -166,6 +166,7 @@ struct dlm_lksb {
+ #include	"md_p.h"
+ #include	"bitmap.h"
+ #include	"msg.h"
++#include	"mdadm_status.h"
+ 
+ #include <endian.h>
+ /* Redhat don't like to #include <asm/byteorder.h>, and
+@@ -449,12 +450,6 @@ struct spare_criteria {
+ 	struct dev_policy *pols;
+ };
+ 
+-typedef enum mdadm_status {
+-	MDADM_STATUS_SUCCESS = 0,
+-	MDADM_STATUS_ERROR,
+-	MDADM_STATUS_UNDEF,
+-} mdadm_status_t;
+-
+ enum mode {
+ 	ASSEMBLE=1,
+ 	BUILD,
+diff --git a/mdadm_status.h b/mdadm_status.h
+new file mode 100644
+index 00000000..905105e2
+--- /dev/null
++++ b/mdadm_status.h
+@@ -0,0 +1,13 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
++#ifndef MDADM_STATUS_H
++#define MDADM_STATUS_H
++
++typedef enum mdadm_status {
++	MDADM_STATUS_SUCCESS = 0,
++	MDADM_STATUS_ERROR,
++	MDADM_STATUS_UNDEF,
++	MDADM_STATUS_MEM_FAIL
++} mdadm_status_t;
++
++#endif
+diff --git a/xmalloc.c b/xmalloc.c
+index dac30eb6..e28d3bd6 100644
+--- a/xmalloc.c
++++ b/xmalloc.c
+@@ -22,6 +22,7 @@
+  */
+ 
+ #include "xmalloc.h"
++#include "mdadm_status.h"
+ 
+ #include <string.h>
+ #include <stdio.h>
+@@ -32,8 +33,7 @@ static void *exit_memory_alloc_failure(void)
+ {
+ 	fprintf(stderr, "Memory allocation failure - aborting\n");
+ 
+-	/* TODO: replace with MDADM_STATUS_MEM_FAIL */
+-	exit(1);
++	exit(MDADM_STATUS_MEM_FAIL);
+ }
+ 
+ void *xmalloc(size_t len)
+-- 
+2.41.0
+

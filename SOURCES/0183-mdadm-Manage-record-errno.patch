@@ -1,0 +1,56 @@
+From e3c3cfb64b8ec8b616e2eefbc69fbc3de29b64b6 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 11 Sep 2024 16:54:32 +0800
+Subject: [PATCH 183/201] mdadm/Manage: record errno
+
+Sometimes it reports:
+mdadm: failed to stop array /dev/md0: Success
+It's the reason the errno is reset. So record errno during the loop.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Manage.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/Manage.c b/Manage.c
+index 241de055..aba97df8 100644
+--- a/Manage.c
++++ b/Manage.c
+@@ -238,13 +238,14 @@ int Manage_stop(char *devname, int fd, int verbose, int will_retry)
+ 					    "array_state",
+ 					    "inactive")) < 0 &&
+ 		       errno == EBUSY) {
++			err = errno;
+ 			sleep_for(0, MSEC_TO_NSEC(200), true);
+ 			count--;
+ 		}
+ 		if (err) {
+ 			if (verbose >= 0)
+ 				pr_err("failed to stop array %s: %s\n",
+-				       devname, strerror(errno));
++				       devname, strerror(err));
+ 			rv = 1;
+ 			goto out;
+ 		}
+@@ -438,14 +439,15 @@ done:
+ 	count = 25; err = 0;
+ 	while (count && fd >= 0 &&
+ 	       (err = ioctl(fd, STOP_ARRAY, NULL)) < 0 && errno == EBUSY) {
++		err = errno;
+ 		sleep_for(0, MSEC_TO_NSEC(200), true);
+ 		count --;
+ 	}
+ 	if (fd >= 0 && err) {
+ 		if (verbose >= 0) {
+ 			pr_err("failed to stop array %s: %s\n",
+-			       devname, strerror(errno));
+-			if (errno == EBUSY)
++			       devname, strerror(err));
++			if (err == EBUSY)
+ 				cont_err("Perhaps a running process, mounted filesystem or active volume group?\n");
+ 		}
+ 		rv = 1;
+-- 
+2.41.0
+

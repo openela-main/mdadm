@@ -1,0 +1,38 @@
+From cd94b9adf7d53457d86cdc39b983b18713f24032 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 11 Sep 2024 16:54:25 +0800
+Subject: [PATCH 176/201] mdadm/Grow: Can't open raid when running --grow
+ --continue
+
+It passes 'array' as devname in Grow_continue. So it fails to
+open raid device. Use mdinfo to open raid device.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Grow.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/Grow.c b/Grow.c
+index 3b9f9942..ebb53a0d 100644
+--- a/Grow.c
++++ b/Grow.c
+@@ -3694,9 +3694,12 @@ started:
+ 		set_array_size(st, info, info->text_version);
+ 
+ 	if (info->new_level != reshape.level) {
+-		if (fd < 0)
+-			fd = open(devname, O_RDONLY);
+-		impose_level(fd, info->new_level, devname, verbose);
++		fd = open_dev(sra->sys_name);
++		if (fd < 0) {
++			pr_err("Can't open %s\n", sra->sys_name);
++			goto out;
++		}
++		impose_level(fd, info->new_level, sra->sys_name, verbose);
+ 		close(fd);
+ 		if (info->new_level == 0)
+ 			st->update_tail = NULL;
+-- 
+2.41.0
+

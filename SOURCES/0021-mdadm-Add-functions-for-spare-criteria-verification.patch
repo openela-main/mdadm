@@ -1,0 +1,286 @@
+From 0c0f09cb035b6a27a1d11c54836742a9945a5014 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Thu, 29 Feb 2024 12:52:05 +0100
+Subject: [PATCH 21/41] mdadm: Add functions for spare criteria verification
+
+It is done similar way in few places. As a result, two almost identical
+functions (dev_size_from_id() and dev_sector_size_from_id()) are
+removed. Now, it uses same file descriptor to send two ioctls.
+
+Two extern functions are added, in next patches
+disk_fd_matches_criteria() is used.
+
+Next optimization is inline zeroing struct spare_criteria. With that,
+we don't need to reset values in get_spare_criteria_imsm().
+
+Dedicated boolean field for checking if criteria are filled is added.
+We don't need to execute the code if it is not set.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Incremental.c |   2 +-
+ Monitor.c     |  14 +------
+ mdadm.h       |   6 ++-
+ super-intel.c |   4 +-
+ util.c        | 112 ++++++++++++++++++++++++++------------------------
+ 5 files changed, 67 insertions(+), 71 deletions(-)
+
+diff --git a/Incremental.c b/Incremental.c
+index 30c07c03..2b5a5859 100644
+--- a/Incremental.c
++++ b/Incremental.c
+@@ -874,7 +874,7 @@ static int array_try_spare(char *devname, int *dfdp, struct dev_policy *pol,
+ 		struct domainlist *dl = NULL;
+ 		struct mdinfo *sra;
+ 		unsigned long long devsize, freesize = 0;
+-		struct spare_criteria sc = {0, 0};
++		struct spare_criteria sc = {0};
+ 
+ 		if (is_subarray(mp->metadata))
+ 			continue;
+diff --git a/Monitor.c b/Monitor.c
+index 9be2b528..1ece8712 100644
+--- a/Monitor.c
++++ b/Monitor.c
+@@ -1070,22 +1070,12 @@ static dev_t choose_spare(struct state *from, struct state *to,
+ 	for (d = from->raid; !dev && d < MAX_DISKS; d++) {
+ 		if (from->devid[d] > 0 && from->devstate[d] == 0) {
+ 			struct dev_policy *pol;
+-			unsigned long long dev_size;
+-			unsigned int dev_sector_size;
+ 
+ 			if (to->metadata->ss->external &&
+ 			    test_partition_from_id(from->devid[d]))
+ 				continue;
+ 
+-			if (sc->min_size &&
+-			    dev_size_from_id(from->devid[d], &dev_size) &&
+-			    dev_size < sc->min_size)
+-				continue;
+-
+-			if (sc->sector_size &&
+-			    dev_sector_size_from_id(from->devid[d],
+-						    &dev_sector_size) &&
+-			    sc->sector_size != dev_sector_size)
++			if (devid_matches_criteria(from->devid[d], sc) == false)
+ 				continue;
+ 
+ 			pol = devid_policy(from->devid[d]);
+@@ -1170,12 +1160,12 @@ static void try_spare_migration(struct state *statelist)
+ {
+ 	struct state *from;
+ 	struct state *st;
+-	struct spare_criteria sc;
+ 
+ 	link_containers_with_subarrays(statelist);
+ 	for (st = statelist; st; st = st->next)
+ 		if (st->active < st->raid && st->spare == 0 && !st->err) {
+ 			struct domainlist *domlist = NULL;
++			struct spare_criteria sc = {0};
+ 			int d;
+ 			struct state *to = st;
+ 
+diff --git a/mdadm.h b/mdadm.h
+index 75c887e4..e8abd730 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -430,6 +430,7 @@ struct createinfo {
+ };
+ 
+ struct spare_criteria {
++	bool criteria_set;
+ 	unsigned long long min_size;
+ 	unsigned int sector_size;
+ };
+@@ -1368,8 +1369,6 @@ extern struct supertype *dup_super(struct supertype *st);
+ extern int get_dev_size(int fd, char *dname, unsigned long long *sizep);
+ extern int get_dev_sector_size(int fd, char *dname, unsigned int *sectsizep);
+ extern int must_be_container(int fd);
+-extern int dev_size_from_id(dev_t id, unsigned long long *size);
+-extern int dev_sector_size_from_id(dev_t id, unsigned int *size);
+ void wait_for(char *dev, int fd);
+ 
+ /*
+@@ -1708,6 +1707,9 @@ extern int assemble_container_content(struct supertype *st, int mdfd,
+ #define	INCR_UNSAFE	2
+ #define	INCR_ALREADY	4
+ #define	INCR_YES	8
++
++extern bool devid_matches_criteria(dev_t devid, struct spare_criteria *sc);
++extern bool disk_fd_matches_criteria(int disk_fd, struct spare_criteria *sc);
+ extern struct mdinfo *container_choose_spares(struct supertype *st,
+ 					      struct spare_criteria *criteria,
+ 					      struct domainlist *domlist,
+diff --git a/super-intel.c b/super-intel.c
+index 4babec9f..39ec4754 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -1748,9 +1748,6 @@ int get_spare_criteria_imsm(struct supertype *st, struct spare_criteria *c)
+ 	int i;
+ 	unsigned long long size = 0;
+ 
+-	c->min_size = 0;
+-	c->sector_size = 0;
+-
+ 	if (!super)
+ 		return -EINVAL;
+ 	/* find first active disk in array */
+@@ -1774,6 +1771,7 @@ int get_spare_criteria_imsm(struct supertype *st, struct spare_criteria *c)
+ 
+ 	c->min_size = size * 512;
+ 	c->sector_size = super->sector_size;
++	c->criteria_set = true;
+ 
+ 	return 0;
+ }
+diff --git a/util.c b/util.c
+index b1454473..041e78cf 100644
+--- a/util.c
++++ b/util.c
+@@ -1266,40 +1266,6 @@ struct supertype *super_by_fd(int fd, char **subarrayp)
+ 	return st;
+ }
+ 
+-int dev_size_from_id(dev_t id, unsigned long long *size)
+-{
+-	char buf[20];
+-	int fd;
+-
+-	sprintf(buf, "%d:%d", major(id), minor(id));
+-	fd = dev_open(buf, O_RDONLY);
+-	if (fd < 0)
+-		return 0;
+-	if (get_dev_size(fd, NULL, size)) {
+-		close(fd);
+-		return 1;
+-	}
+-	close(fd);
+-	return 0;
+-}
+-
+-int dev_sector_size_from_id(dev_t id, unsigned int *size)
+-{
+-	char buf[20];
+-	int fd;
+-
+-	sprintf(buf, "%d:%d", major(id), minor(id));
+-	fd = dev_open(buf, O_RDONLY);
+-	if (fd < 0)
+-		return 0;
+-	if (get_dev_sector_size(fd, NULL, size)) {
+-		close(fd);
+-		return 1;
+-	}
+-	close(fd);
+-	return 0;
+-}
+-
+ struct supertype *dup_super(struct supertype *orig)
+ {
+ 	struct supertype *st;
+@@ -2088,6 +2054,60 @@ void append_metadata_update(struct supertype *st, void *buf, int len)
+ unsigned int __invalid_size_argument_for_IOC = 0;
+ #endif
+ 
++/**
++ * disk_fd_matches_criteria() - check if device matches spare criteria.
++ * @disk_fd: file descriptor of the disk.
++ * @sc: criteria to test.
++ *
++ * Return: true if disk matches criteria, false otherwise.
++ */
++bool disk_fd_matches_criteria(int disk_fd, struct spare_criteria *sc)
++{
++	unsigned int dev_sector_size = 0;
++	unsigned long long dev_size = 0;
++
++	if (!sc->criteria_set)
++		return true;
++
++	if (!get_dev_size(disk_fd, NULL, &dev_size) || dev_size < sc->min_size)
++		return false;
++
++	if (!get_dev_sector_size(disk_fd, NULL, &dev_sector_size) ||
++	    sc->sector_size != dev_sector_size)
++		return false;
++
++	return true;
++}
++
++/**
++ * devid_matches_criteria() - check if device referenced by devid matches spare criteria.
++ * @devid: devid of the device to check.
++ * @sc: criteria to test.
++ *
++ * Return: true if disk matches criteria, false otherwise.
++ */
++bool devid_matches_criteria(dev_t devid, struct spare_criteria *sc)
++{
++	char buf[NAME_MAX];
++	bool ret;
++	int fd;
++
++	if (!sc->criteria_set)
++		return true;
++
++	snprintf(buf, NAME_MAX, "%d:%d", major(devid), minor(devid));
++
++	fd = dev_open(buf, O_RDONLY);
++	if (!is_fd_valid(fd))
++		return false;
++
++	/* Error code inherited */
++	ret = disk_fd_matches_criteria(fd, sc);
++
++	close(fd);
++	return ret;
++}
++
+ /* Pick all spares matching given criteria from a container
+  * if min_size == 0 do not check size
+  * if domlist == NULL do not check domains
+@@ -2111,28 +2131,13 @@ struct mdinfo *container_choose_spares(struct supertype *st,
+ 	dp = &disks->devs;
+ 	disks->array.spare_disks = 0;
+ 	while (*dp) {
+-		int found = 0;
++		bool found = false;
++
+ 		d = *dp;
+ 		if (d->disk.state == 0) {
+-			/* check if size is acceptable */
+-			unsigned long long dev_size;
+-			unsigned int dev_sector_size;
+-			int size_valid = 0;
+-			int sector_size_valid = 0;
+-
+ 			dev_t dev = makedev(d->disk.major,d->disk.minor);
+ 
+-			if (!criteria->min_size ||
+-			   (dev_size_from_id(dev,  &dev_size) &&
+-			    dev_size >= criteria->min_size))
+-				size_valid = 1;
+-
+-			if (!criteria->sector_size ||
+-			    (dev_sector_size_from_id(dev, &dev_sector_size) &&
+-			     criteria->sector_size == dev_sector_size))
+-				sector_size_valid = 1;
+-
+-			found = size_valid && sector_size_valid;
++			found = devid_matches_criteria(dev, criteria);
+ 
+ 			/* check if domain matches */
+ 			if (found && domlist) {
+@@ -2141,7 +2146,8 @@ struct mdinfo *container_choose_spares(struct supertype *st,
+ 					pol_add(&pol, pol_domain,
+ 						spare_group, NULL);
+ 				if (domain_test(domlist, pol, metadata) != 1)
+-					found = 0;
++					found = false;
++
+ 				dev_policy_free(pol);
+ 			}
+ 		}
+-- 
+2.40.1
+

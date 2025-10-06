@@ -1,0 +1,30 @@
+From c36477fac2e485fd294e5cb48d411b548c654f30 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Tue, 28 May 2024 21:51:49 +0800
+Subject: [PATCH 097/157] mdadm/tests: 05r1-re-add-nosuper
+
+Patch 50b100768a11('mdadm: deprecate bitmap custom file') needs to confirm when
+creating raid device with bitmap file.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ tests/05r1-re-add-nosuper | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/05r1-re-add-nosuper b/tests/05r1-re-add-nosuper
+index 058d602d..7d41fd7b 100644
+--- a/tests/05r1-re-add-nosuper
++++ b/tests/05r1-re-add-nosuper
+@@ -6,7 +6,7 @@
+ #
+ bmf=$targetdir/bitmap2
+ rm -f $bmf
+-mdadm -B $md0 -l1 -n2 -b$bmf -d1 $dev1 $dev2
++yes | mdadm -B $md0 -l1 -n2 -b$bmf -d1 $dev1 $dev2
+ check resync
+ check wait
+ testdev $md0 1 $size 1
+-- 
+2.41.0
+

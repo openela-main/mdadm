@@ -1,0 +1,67 @@
+From 13378ba880c251aa65dac12a5d366230cb7ea039 Mon Sep 17 00:00:00 2001
+From: Andre Paiusco <github@paiusco.org>
+Date: Sat, 12 Oct 2024 16:28:29 +0200
+Subject: [PATCH 197/201] mdadm.conf.man: Explain udev rule
+
+Clarify a filename is accepted and the need of reloading the
+udev rules.
+
+Small correction on example order.
+
+Signed-off-by: Andre Paiusco <github@paiusco.org>
+---
+ mdadm.conf.5.in | 24 ++++++++++++++----------
+ 1 file changed, 14 insertions(+), 10 deletions(-)
+
+diff --git a/mdadm.conf.5.in b/mdadm.conf.5.in
+index 14302a91..97862fdb 100644
+--- a/mdadm.conf.5.in
++++ b/mdadm.conf.5.in
+@@ -506,8 +506,12 @@ of the new disk or if both arrays have the same
+ .IR spare-group .
+ 
+ To update hot plug configuration it is necessary to execute
+-.B mdadm \-\-udev\-rules
+-command after changing the config file
++.B mdadm \-\-udev\-rules\=<path_to_file>
++e.g.
++.B /etc/udev/rules.d/65-md-bare.rules
++command after changing the config file. And also run
++.B udevadm control \-\-reload
++otherwise, a reboot is needed.
+ 
+ Keywords used in the
+ .I POLICY
+@@ -724,14 +728,6 @@ ARRAY /dev/md/home UUID=9187a482:5dde19d9:eea3cc4a:d646ab8b
+ .br
+            auto=part
+ .br
+-POLICY domain=domain1 metadata=imsm path=pci-0000:00:1f.2-scsi-*
+-.br
+-           action=spare
+-.br
+-POLICY domain=domain1 metadata=imsm path=pci-0000:04:00.0-scsi-[01]*
+-.br
+-           action=include
+-.br
+ # One domain comprising of devices attached to specified paths is defined.
+ .br
+ # Bare device matching first path will be made an imsm spare on hot plug.
+@@ -742,6 +738,14 @@ POLICY domain=domain1 metadata=imsm path=pci-0000:04:00.0-scsi-[01]*
+ .br
+ # given domain name can be migrated.
+ .br
++POLICY domain=domain1 metadata=imsm path=pci-0000:00:1f.2-scsi-*
++.br
++           action=spare
++.br
++POLICY domain=domain1 metadata=imsm path=pci-0000:04:00.0-scsi-[01]*
++.br
++           action=include
++.br
+ MAILADDR root@mydomain.tld
+ .br
+ PROGRAM /usr/sbin/handle\-mdadm\-events
+-- 
+2.41.0
+

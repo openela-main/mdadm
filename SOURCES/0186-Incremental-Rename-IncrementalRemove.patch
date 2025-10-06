@@ -1,0 +1,67 @@
+From 60923d5cae78447902e9ec10c44504e0588cf447 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Mon, 23 Sep 2024 14:15:31 +0200
+Subject: [PATCH 186/201] Incremental: Rename IncrementalRemove
+
+Rename it to Incremental_remove for better readability.
+No functional changes.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Incremental.c | 4 ++--
+ mdadm.c       | 3 +--
+ mdadm.h       | 2 +-
+ 3 files changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/Incremental.c b/Incremental.c
+index c1389a15..e7987d1d 100644
+--- a/Incremental.c
++++ b/Incremental.c
+@@ -1695,7 +1695,7 @@ static bool is_devnode_path(char *devnode)
+ }
+ 
+ /**
+- * IncrementalRemove() - Remove the device from all raid arrays.
++ * Incremental_remove() - Remove the device from all raid arrays.
+  * @devname: the device we want to remove, it could be kernel device name or devnode.
+  * @id_path: optional, /dev/disk/by-path path to save for bare scenarios support.
+  * @verbose: verbose flag.
+@@ -1703,7 +1703,7 @@ static bool is_devnode_path(char *devnode)
+  * First, fail the device (if needed) and then remove the device from native raid array or external
+  * container.  If it is external container, the device is removed from each subarray first.
+  */
+-int IncrementalRemove(char *devname, char *id_path, int verbose)
++int Incremental_remove(char *devname, char *id_path, int verbose)
+ {
+ 	char *devnm = basename(devname);
+ 	struct mddev_dev devlist = {0};
+diff --git a/mdadm.c b/mdadm.c
+index 0b99fad4..90fd1575 100644
+--- a/mdadm.c
++++ b/mdadm.c
+@@ -1703,8 +1703,7 @@ int main(int argc, char *argv[])
+ 				rv = 1;
+ 				break;
+ 			}
+-			rv = IncrementalRemove(devlist->devname, remove_path,
+-					       c.verbose);
++			rv = Incremental_remove(devlist->devname, remove_path, c.verbose);
+ 		} else
+ 			rv = Incremental(devlist, &c, ss);
+ 		break;
+diff --git a/mdadm.h b/mdadm.h
+index f3b9f54c..d4f5702c 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -1606,7 +1606,7 @@ extern int Incremental(struct mddev_dev *devlist, struct context *c,
+ 		       struct supertype *st);
+ extern void RebuildMap(void);
+ extern int IncrementalScan(struct context *c, char *devnm);
+-extern int IncrementalRemove(char *devname, char *path, int verbose);
++extern int Incremental_remove(char *devname, char *path, int verbose);
+ extern int CreateBitmap(char *filename, int force, char uuid[16],
+ 			unsigned long chunksize, unsigned long daemon_sleep,
+ 			unsigned long write_behind,
+-- 
+2.41.0
+

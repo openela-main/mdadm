@@ -1,0 +1,67 @@
+From 610fc2ee6fc09e828b14e8fa221b3f4f70fc7b2b Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Mon, 29 Apr 2024 15:07:18 +0200
+Subject: [PATCH 57/66] imsm: define RAID_10 attribute
+
+Add MPB_ATTRIB_RAID10_EXT attribute to support RAID 10
+with more than 4 drives.
+
+Allow more than 4 drives in imsm_orom_support_raid_disks_raid10().
+
+This is one of last patches for introducing R10D4+ to imsm.
+Only small adjustments in reshape behaviours are needed.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ platform-intel.c | 3 ++-
+ super-intel.c    | 5 +++++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/platform-intel.c b/platform-intel.c
+index 40e8fb82..15a9fa5a 100644
+--- a/platform-intel.c
++++ b/platform-intel.c
+@@ -76,7 +76,8 @@ static bool imsm_orom_support_raid_disks_count_raid5(const int raid_disks)
+ 
+ static bool imsm_orom_support_raid_disks_count_raid10(const int raid_disks)
+ {
+-	if (raid_disks == 4)
++	/* raid_disks count must be higher than 4 and even */
++	if (raid_disks >= 4 && (raid_disks & 1) == 0)
+ 		return true;
+ 	return false;
+ }
+diff --git a/super-intel.c b/super-intel.c
+index 4b168add..2d309316 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -62,6 +62,8 @@
+ #define MPB_ATTRIB_RAIDCNG		__cpu_to_le32(0x00000020)
+ /* supports expanded stripe sizes of  256K, 512K and 1MB */
+ #define MPB_ATTRIB_EXP_STRIPE_SIZE	__cpu_to_le32(0x00000040)
++/* supports RAID10 with more than 4 drives */
++#define MPB_ATTRIB_RAID10_EXT		__cpu_to_le32(0x00000080)
+ 
+ /* The OROM Support RST Caching of Volumes */
+ #define MPB_ATTRIB_NVM			__cpu_to_le32(0x02000000)
+@@ -89,6 +91,7 @@
+ 					MPB_ATTRIB_RAID10          | \
+ 					MPB_ATTRIB_RAID5           | \
+ 					MPB_ATTRIB_EXP_STRIPE_SIZE | \
++					MPB_ATTRIB_RAID10_EXT      | \
+ 					MPB_ATTRIB_BBM)
+ 
+ /* Define attributes that are unused but not harmful */
+@@ -5552,6 +5555,8 @@ static void imsm_update_version_info(struct intel_super *super)
+ 			break;
+ 		case IMSM_T_RAID10:
+ 			mpb->attributes |= MPB_ATTRIB_RAID10;
++			if (map->num_members > 4)
++				mpb->attributes |= MPB_ATTRIB_RAID10_EXT;
+ 			break;
+ 		}
+ 	}
+-- 
+2.41.0
+

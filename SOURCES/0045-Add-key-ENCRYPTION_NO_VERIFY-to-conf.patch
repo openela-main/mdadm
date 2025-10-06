@@ -1,0 +1,163 @@
+From 336e13fc5ef43bc5b4633a9dadac5f7208e6c241 Mon Sep 17 00:00:00 2001
+From: Blazej Kucman <blazej.kucman@intel.com>
+Date: Fri, 22 Mar 2024 12:51:18 +0100
+Subject: [PATCH 45/66] Add key ENCRYPTION_NO_VERIFY to conf
+
+Add ENCRYPTION_NO_VERIFY config key and allow to disable checking
+encryption status for given type of drives.
+
+The key is introduced because of SATA Opal disks for which TPM commands
+must be enabled in libata kernel module, (libata.allow_tpm=1), otherwise
+it is impossible to verify encryption status. TPM commands are disabled by
+default.
+
+Currently the key only supports the "sata_opal" value, if necessary,
+the functionality is ready to support more types of disks. This
+functionality will be used in the next patches.
+
+Signed-off-by: Blazej Kucman <blazej.kucman@intel.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ config.c           | 25 ++++++++++++++++++++++++-
+ drive_encryption.c | 16 ++++++++++++----
+ mdadm.conf.5.in    | 13 +++++++++++++
+ mdadm.h            |  1 +
+ 4 files changed, 50 insertions(+), 5 deletions(-)
+
+diff --git a/config.c b/config.c
+index 44f7dd2f..b46d71cb 100644
+--- a/config.c
++++ b/config.c
+@@ -81,7 +81,7 @@ char DefaultAltConfDir[] = CONFFILE2 ".d";
+ 
+ enum linetype { Devices, Array, Mailaddr, Mailfrom, Program, CreateDev,
+ 		Homehost, HomeCluster, AutoMode, Policy, PartPolicy, Sysfs,
+-		MonitorDelay, LTEnd };
++		MonitorDelay, EncryptionNoVerify, LTEnd };
+ char *keywords[] = {
+ 	[Devices]  = "devices",
+ 	[Array]    = "array",
+@@ -96,6 +96,7 @@ char *keywords[] = {
+ 	[PartPolicy]="part-policy",
+ 	[Sysfs]    = "sysfs",
+ 	[MonitorDelay] = "monitordelay",
++	[EncryptionNoVerify] = "ENCRYPTION_NO_VERIFY",
+ 	[LTEnd]    = NULL
+ };
+ 
+@@ -729,6 +730,19 @@ void monitordelayline(char *line)
+ 	}
+ }
+ 
++static bool sata_opal_encryption_no_verify;
++void encryption_no_verify_line(char *line)
++{
++	char *word;
++
++	for (word = dl_next(line); word != line; word = dl_next(word)) {
++		if (strcasecmp(word, "sata_opal") == 0)
++			sata_opal_encryption_no_verify = true;
++		else
++			pr_err("unrecognised word on ENCRYPTION_NO_VERIFY line: %s\n", word);
++	}
++}
++
+ char auto_yes[] = "yes";
+ char auto_no[] = "no";
+ char auto_homehost[] = "homehost";
+@@ -913,6 +927,9 @@ void conf_file(FILE *f)
+ 		case MonitorDelay:
+ 			monitordelayline(line);
+ 			break;
++		case EncryptionNoVerify:
++			encryption_no_verify_line(line);
++			break;
+ 		default:
+ 			pr_err("Unknown keyword %s\n", line);
+ 		}
+@@ -1075,6 +1092,12 @@ int conf_get_monitor_delay(void)
+ 	return monitor_delay;
+ }
+ 
++bool conf_get_sata_opal_encryption_no_verify(void)
++{
++	load_conffile();
++	return sata_opal_encryption_no_verify;
++}
++
+ struct createinfo *conf_get_create_info(void)
+ {
+ 	load_conffile();
+diff --git a/drive_encryption.c b/drive_encryption.c
+index d520f0c7..6b2bd358 100644
+--- a/drive_encryption.c
++++ b/drive_encryption.c
+@@ -656,10 +656,18 @@ get_ata_encryption_information(int disk_fd, struct encryption_information *infor
+ 	if (status == MDADM_STATUS_ERROR)
+ 		return MDADM_STATUS_ERROR;
+ 
+-	if (is_ata_trusted_computing_supported(buffer_identify) &&
+-	    !sysfs_is_libata_allow_tpm_enabled(verbose)) {
+-		pr_vrb("For SATA with Trusted Computing support, required libata.tpm_enabled=1.\n");
+-		return MDADM_STATUS_ERROR;
++	/* Possible OPAL support, further checks require tpm_enabled.*/
++	if (is_ata_trusted_computing_supported(buffer_identify)) {
++		/* OPAL SATA encryption checking disabled. */
++		if (conf_get_sata_opal_encryption_no_verify())
++			return MDADM_STATUS_SUCCESS;
++
++		if (!sysfs_is_libata_allow_tpm_enabled(verbose)) {
++			pr_vrb("Detected SATA drive /dev/%s with Trusted Computing support.\n",
++			       fd2kname(disk_fd));
++			pr_vrb("Cannot verify encryption state. Requires libata.tpm_enabled=1.\n");
++			return MDADM_STATUS_ERROR;
++		}
+ 	}
+ 
+ 	ata_opal_status = is_ata_opal(disk_fd, buffer_identify, verbose);
+diff --git a/mdadm.conf.5.in b/mdadm.conf.5.in
+index 787e51e9..afb0a296 100644
+--- a/mdadm.conf.5.in
++++ b/mdadm.conf.5.in
+@@ -636,6 +636,17 @@ If multiple
+ .B MINITORDELAY
+ lines are provided, only first non-zero value is considered.
+ 
++.TP
++.B ENCRYPTION_NO_VERIFY
++The
++.B ENCRYPTION_NO_VERIFY
++disables encryption verification for devices with particular encryption support detected.
++Currently, only verification of SATA OPAL encryption can be disabled.
++It does not disable ATA security encryption verification.
++Available parameter
++.I "sata_opal".
++
++
+ .SH FILES
+ 
+ .SS {CONFFILE}
+@@ -744,6 +755,8 @@ SYSFS uuid=bead5eb6:31c17a27:da120ba2:7dfda40d group_thread_cnt=4
+ sync_speed_max=1000000
+ .br
+ MONITORDELAY 60
++.br
++ENCRYPTION_NO_VERIFY sata_opal
+ 
+ .SH SEE ALSO
+ .BR mdadm (8),
+diff --git a/mdadm.h b/mdadm.h
+index 52a66b9a..2640b396 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -1673,6 +1673,7 @@ extern char *conf_get_program(void);
+ extern char *conf_get_homehost(int *require_homehostp);
+ extern char *conf_get_homecluster(void);
+ extern int conf_get_monitor_delay(void);
++extern bool conf_get_sata_opal_encryption_no_verify(void);
+ extern char *conf_line(FILE *file);
+ extern char *conf_word(FILE *file, int allow_key);
+ extern void print_quoted(char *str);
+-- 
+2.41.0
+

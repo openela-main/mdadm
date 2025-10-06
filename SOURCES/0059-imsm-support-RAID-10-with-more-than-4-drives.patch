@@ -1,0 +1,168 @@
+From 44463edeb303a464c4a44fcea184b267aeb53302 Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Mon, 29 Apr 2024 15:07:20 +0200
+Subject: [PATCH 59/66] imsm: support RAID 10 with more than 4 drives
+
+VROC UEFI driver does not support RAID 10 with more than 4 drives.
+Add user prompts if such layout is being created and for R0->R10
+reshapes.
+
+Refactor ask() function:
+- simplify the code,
+- remove dialog reattempts,
+- do no pass '?' sign on function calls,
+- highlight default option on output.
+
+This patch completes adding support for R10D4+ to IMSM.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Create.c      |  9 ++++++++-
+ super-intel.c | 14 ++++++++++++--
+ util.c        | 39 +++++++++++++++++++++++++--------------
+ 3 files changed, 45 insertions(+), 17 deletions(-)
+
+diff --git a/Create.c b/Create.c
+index d94253b1..d033eb68 100644
+--- a/Create.c
++++ b/Create.c
+@@ -965,6 +965,13 @@ int Create(struct supertype *st, struct mddev_ident *ident, int subdevs,
+ 		return 1;
+ 	}
+ 
++	if (st->ss == &super_imsm && s->level == 10 && s->raiddisks > 4) {
++		/* Print no matter runstop was specifed */
++		pr_err("Warning! VROC UEFI driver does not support RAID10 in requested layout.\n");
++		pr_err("Array won't be suitable as boot device.\n");
++		warn = 1;
++	}
++
+ 	if (!have_container && s->level > 0 && ((maxsize-s->size)*100 > maxsize)) {
+ 		if (c->runstop != 1 || c->verbose >= 0)
+ 			pr_err("largest drive (%s) exceeds size (%lluK) by more than 1%%\n",
+@@ -984,7 +991,7 @@ int Create(struct supertype *st, struct mddev_ident *ident, int subdevs,
+ 
+ 	if (warn) {
+ 		if (c->runstop!= 1) {
+-			if (!ask("Continue creating array? ")) {
++			if (!ask("Continue creating array")) {
+ 				pr_err("create aborted.\n");
+ 				return 1;
+ 			}
+diff --git a/super-intel.c b/super-intel.c
+index d60915e8..2b8b6fda 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -523,6 +523,7 @@ enum imsm_reshape_type {
+ 	CH_TAKEOVER,
+ 	CH_MIGRATION,
+ 	CH_ARRAY_SIZE,
++	CH_ABORT
+ };
+ 
+ /* definition of messages passed to imsm_process_update */
+@@ -11898,7 +11899,7 @@ success:
+ ****************************************************************************/
+ enum imsm_reshape_type imsm_analyze_change(struct supertype *st,
+ 					   struct geo_params *geo,
+-					   int direction)
++					   int direction, struct context *c)
+ {
+ 	struct mdinfo info;
+ 	int change = -1;
+@@ -11925,6 +11926,14 @@ enum imsm_reshape_type imsm_analyze_change(struct supertype *st,
+ 				check_devs = 1;
+ 				raid_disks += 1; /* parity disk added */
+ 			} else if (geo->level == IMSM_T_RAID10) {
++				if (geo->level == IMSM_T_RAID10 && geo->raid_disks > 2 &&
++				    !c->force) {
++					pr_err("Warning! VROC UEFI driver does not support RAID10 in requested layout.\n");
++					pr_err("Array won't be suitable as boot device.\n");
++					pr_err("Note: You can omit this check with \"--force\"\n");
++					if (ask("Do you want to continue") < 1)
++						return CH_ABORT;
++				}
+ 				change = CH_TAKEOVER;
+ 				check_devs = 1;
+ 				raid_disks *= 2; /* mirrors added */
+@@ -12219,7 +12228,7 @@ static int imsm_reshape_super(struct supertype *st, struct shape *shape, struct
+ 			goto exit_imsm_reshape_super;
+ 		}
+ 		super->current_vol = dev->index;
+-		change = imsm_analyze_change(st, &geo, shape->direction);
++		change = imsm_analyze_change(st, &geo, shape->direction, c);
+ 		switch (change) {
+ 		case CH_TAKEOVER:
+ 			ret_val = imsm_takeover(st, &geo);
+@@ -12262,6 +12271,7 @@ static int imsm_reshape_super(struct supertype *st, struct shape *shape, struct
+ 				free(u);
+ 		}
+ 		break;
++		case CH_ABORT:
+ 		default:
+ 			ret_val = 1;
+ 		}
+diff --git a/util.c b/util.c
+index 9e837045..4fbf11c4 100644
+--- a/util.c
++++ b/util.c
+@@ -725,23 +725,33 @@ int stat_is_blkdev(char *devname, dev_t *rdev)
+ 	return 1;
+ }
+ 
++/**
++ * ask() - prompt user for "yes/no" dialog.
++ * @mesg: message to be printed, without '?' sign.
++ * Returns: 1 if 'Y/y', 0 otherwise.
++ *
++ * The default value is 'N/n', thus the caps on "N" on prompt.
++ */
+ int ask(char *mesg)
+ {
+-	char *add = "";
+-	int i;
+-	for (i = 0; i < 5; i++) {
+-		char buf[100];
+-		fprintf(stderr, "%s%s", mesg, add);
+-		fflush(stderr);
+-		if (fgets(buf, 100, stdin)==NULL)
+-			return 0;
+-		if (buf[0]=='y' || buf[0]=='Y')
+-			return 1;
+-		if (buf[0]=='n' || buf[0]=='N')
+-			return 0;
+-		add = "(y/n) ";
++	char buf[3] = {0};
++
++	fprintf(stderr, "%s [y/N]? ", mesg);
++	fflush(stderr);
++	if (fgets(buf, 3, stdin) == NULL)
++		return 0;
++	if (strlen(buf) == 1) {
++		pr_err("assuming no.\n");
++		return 0;
+ 	}
+-	pr_err("assuming 'no'\n");
++	if (buf[1] != '\n')
++		goto bad_option;
++	if (toupper(buf[0]) == 'Y')
++		return 1;
++	if (toupper(buf[0]) == 'N')
++		return 0;
++bad_option:
++	pr_err("bad option.\n");
+ 	return 0;
+ }
+ 
+@@ -1868,6 +1878,7 @@ int set_array_info(int mdfd, struct supertype *st, struct mdinfo *info)
+ 
+ 	if (st->ss->external)
+ 		return sysfs_set_array(info);
++
+ 	memset(&inf, 0, sizeof(inf));
+ 	inf.major_version = info->array.major_version;
+ 	inf.minor_version = info->array.minor_version;
+-- 
+2.41.0
+

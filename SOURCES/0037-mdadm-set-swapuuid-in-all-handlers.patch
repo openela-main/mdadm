@@ -1,0 +1,59 @@
+From 1c8327950566449e206e613c11c8232032f26787 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Mon, 18 Mar 2024 16:19:29 +0100
+Subject: [PATCH 37/41] mdadm: set swapuuid in all handlers
+
+It is not set, so it should be 0 but it may vary on compilation
+settings. Set it always to 0.
+
+metadata should care to set UUID and read in proper endianness so it
+doesn't follow super1 concept of swapuuid to depend on endianness.
+
+It is not an attempt to fix endianness issues.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ super-ddf.c   | 1 +
+ super-intel.c | 1 +
+ super0.c      | 2 ++
+ 3 files changed, 4 insertions(+)
+
+diff --git a/super-ddf.c b/super-ddf.c
+index 7571e3b7..94ac5ff3 100644
+--- a/super-ddf.c
++++ b/super-ddf.c
+@@ -5162,6 +5162,7 @@ struct superswitch super_ddf = {
+ 	.default_geometry = default_geometry_ddf,
+ 
+ 	.external	= 1,
++	.swapuuid	= 0,
+ 
+ /* for mdmon */
+ 	.open_new       = ddf_open_new,
+diff --git a/super-intel.c b/super-intel.c
+index 77140455..e1754f29 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -13116,6 +13116,7 @@ struct superswitch super_imsm = {
+ 	.validate_ppl	= validate_ppl_imsm,
+ 
+ 	.external	= 1,
++	.swapuuid	= 0,
+ 	.name = "imsm",
+ 
+ /* for mdmon */
+diff --git a/super0.c b/super0.c
+index a7c5f813..9b8a1bd6 100644
+--- a/super0.c
++++ b/super0.c
+@@ -1369,5 +1369,7 @@ struct superswitch super0 = {
+ 	.locate_bitmap = locate_bitmap0,
+ 	.write_bitmap = write_bitmap0,
+ 	.free_super = free_super0,
++
++	.swapuuid = 0,
+ 	.name = "0.90",
+ };
+-- 
+2.40.1
+

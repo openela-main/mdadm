@@ -1,0 +1,45 @@
+From 49145d4f574b21a6c0612ce691f255732cb91832 Mon Sep 17 00:00:00 2001
+From: Nigel Croxon <ncroxon@redhat.com>
+Date: Wed, 22 May 2024 16:05:25 -0400
+Subject: [PATCH 072/157] mdadm: super-intel remove dead code
+
+Execution cannot reach this statement: "while (devlist) { dv = de...".
+Local variable "err" is assigned only once, to a constant value,
+making it effectively constant throughout its scope.
+Remove dead code.
+
+Signed-off-by: Nigel Croxon <ncroxon@redhat.com>
+---
+ super-intel.c | 9 ---------
+ 1 file changed, 9 deletions(-)
+
+diff --git a/super-intel.c b/super-intel.c
+index 95856322..d1b737c7 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -7046,7 +7046,6 @@ get_devices(const char *hba_path)
+ 	struct md_list *dv;
+ 	struct dirent *ent;
+ 	DIR *dir;
+-	int err = 0;
+ 
+ #if DEBUG_LOOP
+ 	devlist = get_loop_devices();
+@@ -7088,14 +7087,6 @@ get_devices(const char *hba_path)
+ 		dv->next = devlist;
+ 		devlist = dv;
+ 	}
+-	if (err) {
+-		while(devlist) {
+-			dv = devlist;
+-			devlist = devlist->next;
+-			free(dv->devname);
+-			free(dv);
+-		}
+-	}
+ 	closedir(dir);
+ 	return devlist;
+ }
+-- 
+2.41.0
+

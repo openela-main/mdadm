@@ -1,0 +1,179 @@
+From f5b2dddd258084836634e169c84400e82825996c Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 11 Sep 2024 16:54:28 +0800
+Subject: [PATCH 179/201] mdadm/tests: 07changelevels fix
+
+There are five changes to this case.
+
+1. remove testdev check. It can't work anymore and check if it's a
+block device directly.
+
+2. It can't change level and chunk size at the same time
+
+3. Sleep more than 10s before check wait.
+The test devices are small. Sometimes it can finish so quickly once
+the reshape just starts. mdadm will be stuck before it waits reshape
+to start. So the sync speed is limited. And it restores the sync speed
+when it waits reshape to finish. It's good for case without backup
+file.
+
+It uses systemd service mdadm-grow-continue to monitor reshape
+progress when specifying backup file. If reshape finishes so quickly
+before it starts monitoring reshape progress, the daemon will be stuck
+too. Because reshape_progress is 0 which means the reshape hasn't been
+started. So give more time to let service can get right information
+from kernel space.
+
+But before getting these information. It needs to suspend array. At
+the same time the reshape is running. The kernel reshape daemon will
+update metadata 10s. So it needs to limit the sync speed more than 10s
+before restoring sync speed. Then systemd service can suspend array
+and start monitoring reshape progress.
+
+4. Wait until mdadm-grow-continue service exits
+mdadm --wait doesn't wait systemd service. For the case that needs
+backup file, systemd service deletes the backup file after reshape
+finishes. In this test case, it runs next case when reshape finishes.
+And it fails because it can't create backup file because the backup
+file exits.
+
+5. Don't reshape from raid5 to raid1. It can't work now.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ dev/null                    |  0
+ tests/07changelevels        | 27 ++++++++++++---------------
+ tests/07changelevels.broken |  9 ---------
+ tests/func.sh               |  4 ++++
+ 4 files changed, 16 insertions(+), 24 deletions(-)
+ create mode 100644 dev/null
+ delete mode 100644 tests/07changelevels.broken
+
+diff --git a/dev/null b/dev/null
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/tests/07changelevels b/tests/07changelevels
+index a328874a..3df8660e 100644
+--- a/tests/07changelevels
++++ b/tests/07changelevels
+@@ -10,7 +10,6 @@ export MDADM_GROW_VERIFY=1
+ dotest() {
+  sleep 2
+  check wait
+- testdev $md0 $1 19968 64 nd
+  blockdev --flushbufs $md0
+  cmp -s -n $[textK*1024] $md0 /tmp/RandFile || { echo cmp failed; exit 2; }
+  # write something new - shift chars 4 space
+@@ -24,7 +23,7 @@ checkgeo() {
+  # level raid_disks chunk_size layout
+  dev=$1
+  shift
+- sleep 0.5
++ sleep 15
+  check wait
+  sleep 1
+  for attr in level raid_disks chunk_size layout
+@@ -43,22 +42,25 @@ checkgeo() {
+ 
+ bu=/tmp/md-test-backup
+ rm -f $bu
+-mdadm -CR $md0 -l1 -n2 -x1 $dev0 $dev1 $dev2 -z 19968
+-testdev $md0 1 $mdsize1a 64
++mdadm -CR $md0 -l1 -n2 -x1 $dev0 $dev1 $dev2
++[ -b $md0 ] || die "$1 isn't a block device."
+ dd if=/tmp/RandFile of=$md0
+ dotest 1
+ 
+-mdadm --grow $md0 -l5 -n3 --chunk 64
++mdadm --grow $md0 -l5 -n3
++checkgeo md0 raid5 3
+ dotest 2
+ 
+ mdadm $md0 --add $dev3 $dev4
+ mdadm --grow $md0 -n4 --chunk 32
++checkgeo md0 raid5 4 $[32*1024]
+ dotest 3
+ 
+ mdadm -G $md0 -l6 --backup-file $bu
++checkgeo md0 raid6 5 $[32*1024]
+ dotest 3
+ 
+-mdadm -G /dev/md0 --array-size 39936
++mdadm -G /dev/md0 --array-size 37888
+ mdadm -G $md0 -n4 --backup-file $bu
+ checkgeo md0 raid6 4 $[32*1024]
+ dotest 2
+@@ -67,14 +69,11 @@ mdadm -G $md0 -l5 --backup-file $bu
+ checkgeo md0 raid5 3 $[32*1024]
+ dotest 2
+ 
+-mdadm -G /dev/md0 --array-size 19968
++mdadm -G /dev/md0 --array-size 18944
+ mdadm -G $md0 -n2 --backup-file $bu
+ checkgeo md0 raid5 2 $[32*1024]
+ dotest 1
+ 
+-mdadm -G --level=1 $md0
+-dotest 1
+-
+ # now repeat that last few steps only with a degraded array.
+ mdadm -S $md0
+ mdadm -CR $md0 -l6 -n5 $dev0 $dev1 $dev2 $dev3 $dev4
+@@ -83,7 +82,7 @@ dotest 3
+ 
+ mdadm $md0 --fail $dev0
+ 
+-mdadm -G /dev/md0 --array-size 37888
++mdadm -G /dev/md0 --array-size 35840
+ mdadm -G $md0 -n4 --backup-file $bu
+ dotest 2
+ checkgeo md0 raid6 4 $[512*1024]
+@@ -103,12 +102,10 @@ dotest 2
+ mdadm -G $md0 -l5 --backup-file $bu
+ dotest 2
+ 
+-mdadm -G /dev/md0 --array-size 18944
++mdadm -G /dev/md0 --array-size 17920
+ mdadm -G $md0 -n2 --backup-file $bu
+ dotest 1
+ checkgeo md0 raid5 2 $[512*1024]
+ mdadm $md0 --fail $dev2
+ 
+-mdadm -G --level=1 $md0
+-dotest 1
+-checkgeo md0 raid1 2
++mdadm -S $md0
+diff --git a/tests/07changelevels.broken b/tests/07changelevels.broken
+deleted file mode 100644
+index 9b930d93..00000000
+--- a/tests/07changelevels.broken
++++ /dev/null
+@@ -1,9 +0,0 @@
+-always fails
+-
+-Fails with errors:
+-
+-    mdadm: /dev/loop0 is smaller than given size. 18976K < 19968K + metadata
+-    mdadm: /dev/loop1 is smaller than given size. 18976K < 19968K + metadata
+-    mdadm: /dev/loop2 is smaller than given size. 18976K < 19968K + metadata
+-
+-    ERROR: /dev/md0 isn't a block device.
+diff --git a/tests/func.sh b/tests/func.sh
+index e7ccc4fc..567d91d9 100644
+--- a/tests/func.sh
++++ b/tests/func.sh
+@@ -362,6 +362,10 @@ check() {
+ 		do
+ 			sleep 0.5
+ 		done
++		while ps auxf | grep "mdadm --grow --continue" | grep -v grep
++		do
++			sleep 1
++		done
+ 		echo $min > /proc/sys/dev/raid/speed_limit_min
+ 		echo $max > /proc/sys/dev/raid/speed_limit_max
+ 	;;
+-- 
+2.41.0
+

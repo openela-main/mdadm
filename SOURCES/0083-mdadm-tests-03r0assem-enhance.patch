@@ -1,0 +1,38 @@
+From f136d9a8b7d8fdfd7539b96707bc9a03528754aa Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 22 May 2024 16:50:45 +0800
+Subject: [PATCH 083/157] mdadm/tests 03r0assem enhance
+
+dcc22ae74a864 ('super1: remove support for name= in config') already
+removes name= support. So remove related test codes in 03r0assem.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ tests/03r0assem | 10 ----------
+ 1 file changed, 10 deletions(-)
+
+diff --git a/tests/03r0assem b/tests/03r0assem
+index f7c29e8c..4bf8b9e8 100644
+--- a/tests/03r0assem
++++ b/tests/03r0assem
+@@ -33,16 +33,6 @@ mdadm -As -c $conf $md2
+ $tst
+ mdadm -S $md2
+ 
+-{
+-  echo DEVICE $devlist
+-  echo array $md2 name=2
+-} > $conf
+-
+-mdadm -As -c $conf $md2
+-$tst
+-mdadm -S $md2
+-
+-
+ {
+   echo DEVICE $devlist
+   echo array $md2 devices=$dev0,$dev1,$dev2
+-- 
+2.41.0
+

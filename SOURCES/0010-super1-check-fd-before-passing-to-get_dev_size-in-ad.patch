@@ -1,0 +1,34 @@
+From 7ccf947eb595c1bb729c32ba18ce171dada76a68 Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Tue, 20 Feb 2024 11:56:11 +0100
+Subject: [PATCH 10/41] super1: check fd before passing to get_dev_size() in
+ add_to_super1()
+
+Check if file descriptor is valid before passing it to get_dev_size() in
+add_to_super().
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ super1.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/super1.c b/super1.c
+index 871d19f0..5439b7bb 100644
+--- a/super1.c
++++ b/super1.c
+@@ -1752,7 +1752,10 @@ static int add_to_super1(struct supertype *st, mdu_disk_info_t *dk,
+ 	di->devname = devname;
+ 	di->disk = *dk;
+ 	di->data_offset = data_offset;
+-	get_dev_size(fd, NULL, &di->dev_size);
++
++	if (is_fd_valid(fd))
++		get_dev_size(fd, NULL, &di->dev_size);
++
+ 	di->next = NULL;
+ 	*dip = di;
+ 
+-- 
+2.40.1
+

@@ -1,0 +1,48 @@
+From b8f5523a795b8f7e56dfbc139ce7f64728b67726 Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Tue, 20 Feb 2024 11:56:07 +0100
+Subject: [PATCH 06/41] Create: add_disk_to_super() fix resource leak
+
+Fixes resource leak in add_disk_to_super().
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Create.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/Create.c b/Create.c
+index 8082f54a..7e9170b6 100644
+--- a/Create.c
++++ b/Create.c
+@@ -279,8 +279,10 @@ static int add_disk_to_super(int mdfd, struct shape *s, struct context *c,
+ 			       dv->devname);
+ 			return 1;
+ 		}
+-		if (!fstat_is_blkdev(fd, dv->devname, &rdev))
++		if (!fstat_is_blkdev(fd, dv->devname, &rdev)) {
++			close(fd);
+ 			return 1;
++		}
+ 		info->disk.major = major(rdev);
+ 		info->disk.minor = minor(rdev);
+ 	}
+@@ -289,6 +291,7 @@ static int add_disk_to_super(int mdfd, struct shape *s, struct context *c,
+ 	if (st->ss->add_to_super(st, &info->disk, fd, dv->devname,
+ 				 dv->data_offset)) {
+ 		ioctl(mdfd, STOP_ARRAY, NULL);
++		close(fd);
+ 		return 1;
+ 	}
+ 	st->ss->getinfo_super(st, info, NULL);
+@@ -297,6 +300,7 @@ static int add_disk_to_super(int mdfd, struct shape *s, struct context *c,
+ 		*zero_pid = write_zeroes_fork(fd, s, st, dv);
+ 		if (*zero_pid <= 0) {
+ 			ioctl(mdfd, STOP_ARRAY, NULL);
++			close(fd);
+ 			return 1;
+ 		}
+ 	}
+-- 
+2.40.1
+

@@ -1,0 +1,120 @@
+From a7a5e676a7eb2ac97acd31b13f75515e9573f891 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Thu, 26 Sep 2024 09:01:55 +0200
+Subject: [PATCH 194/201] mdmonitor: Abandon custom configuration files
+
+Operating system vendors are customizing mdmonitor service beacause
+the default form is not satifying for them (expect SUSE). As a result,
+support is complicated (maintainers have to check the system) and man page
+is not detailed.
+
+I propose to abandon custom configuration files via sysconfig and keep
+it inside mdadm.conf only.
+
+Detailed comment in service for OSV maintainers is added to help with
+transition.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Makefile                  |  1 -
+ systemd/SUSE-mdadm_env.sh | 48 ---------------------------------------
+ systemd/mdmonitor.service | 19 ++++++++++++----
+ 3 files changed, 15 insertions(+), 53 deletions(-)
+ delete mode 100644 systemd/SUSE-mdadm_env.sh
+
+diff --git a/Makefile b/Makefile
+index 24367b0f..bcd092de 100644
+--- a/Makefile
++++ b/Makefile
+@@ -341,7 +341,6 @@ install-systemd: systemd/mdmon@.service
+ 	   $(INSTALL) -D -m 755  .install.tmp.3 $(DESTDIR)$(SYSTEMD_DIR)-shutdown/$$file ; \
+ 	   rm -f .install.tmp.3; \
+ 	done
+-	if [ -f /etc/SuSE-release -o -n "$(SUSE)" ] ;then $(INSTALL) -D -m 755 systemd/SUSE-mdadm_env.sh $(DESTDIR)$(LIB_DIR)/mdadm_env.sh ;fi
+ 
+ install-bin: mdadm mdmon
+ 	$(INSTALL) -D $(STRIP) -m 755 mdadm $(DESTDIR)$(BINDIR)/mdadm
+diff --git a/systemd/SUSE-mdadm_env.sh b/systemd/SUSE-mdadm_env.sh
+deleted file mode 100644
+index c13b48ab..00000000
+--- a/systemd/SUSE-mdadm_env.sh
++++ /dev/null
+@@ -1,48 +0,0 @@
+-#!/bin/sh
+-
+-# extract configuration from /etc/sysconfig/mdadm and write
+-# environment to /run/sysconfig/mdadm to be used by
+-# systemd unit files.
+-
+-MDADM_SCAN="yes"
+-
+-# Following adapted from /etc/init.d/mdadmd on openSUSE
+-
+-mdadmd_CONFIG=/etc/sysconfig/mdadm
+-if test -r $mdadmd_CONFIG; then
+-   . $mdadmd_CONFIG
+-fi
+-
+-if [ x$MDADM_DELAY != x"" ]; then
+-  MDADM_DELAY="-d "$MDADM_DELAY;
+-fi
+-
+-if [ x$MDADM_MAIL != x"" ]; then
+-  MDADM_MAIL="-m \"$MDADM_MAIL\""
+-fi
+-
+-if [ x$MDADM_PROGRAM != x"" ]; then
+-  MDADM_PROGRAM="-p \"$MDADM_PROGRAM\""
+-fi
+-
+-if [ x$MDADM_SCAN = x"yes" ]; then
+-  MDADM_SCAN="--scan"
+-else
+-  MDADM_SCAN=""
+-fi
+-
+-if [ x$MDADM_SEND_MAIL_ON_START = x"yes" ]; then
+-  MDADM_SEND_MAIL="-t"
+-else
+-  MDADM_SEND_MAIL=""
+-fi
+-
+-if [ x$MDADM_CONFIG != x"" ]; then
+-  MDADM_CONFIG="-c \"$MDADM_CONFIG\""
+-fi
+-
+-mkdir -p /run/sysconfig
+-echo "MDADM_MONITOR_ARGS=$MDADM_RAIDDEVICES $MDADM_DELAY $MDADM_MAIL $MDADM_PROGRAM $MDADM_SCAN $MDADM_SEND_MAIL $MDADM_CONFIG" > /run/sysconfig/mdadm
+-if [ -n "$MDADM_CHECK_DURATION" ]; then
+- echo "MDADM_CHECK_DURATION=$MDADM_CHECK_DURATION" >> /run/sysconfig/mdadm
+-fi
+diff --git a/systemd/mdmonitor.service b/systemd/mdmonitor.service
+index 9c364785..6d0c0039 100644
+--- a/systemd/mdmonitor.service
++++ b/systemd/mdmonitor.service
+@@ -11,7 +11,18 @@ DefaultDependencies=no
+ Documentation=man:mdadm(8)
+ 
+ [Service]
+-Environment=  MDADM_MONITOR_ARGS=--scan
+-EnvironmentFile=-/run/sysconfig/mdadm
+-ExecStartPre=-/usr/lib/mdadm/mdadm_env.sh
+-ExecStart=BINDIR/mdadm --monitor $MDADM_MONITOR_ARGS
++# For Maintainers:
++# We need to provide consistent mdmonitor configuration man page to the users. We don't want to get
++# asked continuously how it can be configured.
++# /etc/sysconfig/mdadm or /etc/sysconfig/mdmonitor or whatever else, should be abandoned.
++# Following parameters should be customized via mdadm.conf only:
++# - MONITORDELAY (do not set --delay in service)
++# - MAILADDR (do not set --mail in service)
++# - MAILFROM (not settable from cmdline)
++# - PROGRAM (do not set --program or --alert in service)
++#
++# Following parameters can be customized in service:
++# - --syslog (configure syslog logging)
++# - --fork (Type=forking must be added, not recommended and not needed with systemd)
++# - --pid-file (allowed only when --fork selected)
++ExecStart=BINDIR/mdadm --monitor --scan
+-- 
+2.41.0
+

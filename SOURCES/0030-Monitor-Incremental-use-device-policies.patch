@@ -1,0 +1,142 @@
+From 51a9f2fc5e982f3bcbf88fe1bf30c0bf55bfd49c Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Thu, 29 Feb 2024 12:52:14 +0100
+Subject: [PATCH 30/41] Monitor, Incremental: use device policies
+
+spare_criteria is expanded to contain policies which will be generated
+by handler's get_spare_criteria() function. It provides a way to
+test device for metadata specific policies earlier than during
+add_do_super(), when device is already removed from previous
+array/container for Monitor.
+
+For Incremental, it ensures that all criteria are tested when trying
+spare. It is not tested when device contains valid metadata.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Incremental.c |  2 +-
+ Monitor.c     |  3 ++-
+ mdadm.h       |  5 +++--
+ util.c        | 13 +++++++++----
+ 4 files changed, 15 insertions(+), 8 deletions(-)
+
+diff --git a/Incremental.c b/Incremental.c
+index 66c2cc86..958ba9ba 100644
+--- a/Incremental.c
++++ b/Incremental.c
+@@ -865,7 +865,7 @@ mdadm_status_t incremental_external_test_spare_criteria(struct supertype *st, ch
+ 		goto out;
+ 	}
+ 
+-	if (!disk_fd_matches_criteria(disk_fd, &sc)) {
++	if (!disk_fd_matches_criteria(dup, disk_fd, &sc)) {
+ 		if (verbose > 1)
+ 			pr_err("Disk does not match spare criteria for %s\n", container_devname);
+ 		goto out;
+diff --git a/Monitor.c b/Monitor.c
+index 6b4560ae..9b016bc3 100644
+--- a/Monitor.c
++++ b/Monitor.c
+@@ -1047,7 +1047,7 @@ static dev_t choose_spare(struct state *from, struct state *to,
+ 			    test_partition_from_id(from->devid[d]))
+ 				continue;
+ 
+-			if (devid_matches_criteria(from->devid[d], sc) == false)
++			if (devid_matches_criteria(to->metadata, from->devid[d], sc) == false)
+ 				continue;
+ 
+ 			pol = devid_policy(from->devid[d]);
+@@ -1195,6 +1195,7 @@ static void try_spare_migration(struct state *statelist)
+ 				}
+ 			}
+ 			domain_free(domlist);
++			dev_policy_free(sc.pols);
+ 		}
+ }
+ 
+diff --git a/mdadm.h b/mdadm.h
+index af2bc714..cfa11391 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -433,6 +433,7 @@ struct spare_criteria {
+ 	bool criteria_set;
+ 	unsigned long long min_size;
+ 	unsigned int sector_size;
++	struct dev_policy *pols;
+ };
+ 
+ typedef enum mdadm_status {
+@@ -1734,8 +1735,8 @@ extern int assemble_container_content(struct supertype *st, int mdfd,
+ #define	INCR_ALREADY	4
+ #define	INCR_YES	8
+ 
+-extern bool devid_matches_criteria(dev_t devid, struct spare_criteria *sc);
+-extern bool disk_fd_matches_criteria(int disk_fd, struct spare_criteria *sc);
++extern bool devid_matches_criteria(struct supertype *st, dev_t devid, struct spare_criteria *sc);
++extern bool disk_fd_matches_criteria(struct supertype *st, int disk_fd, struct spare_criteria *sc);
+ extern struct mdinfo *container_choose_spares(struct supertype *st,
+ 					      struct spare_criteria *criteria,
+ 					      struct domainlist *domlist,
+diff --git a/util.c b/util.c
+index 041e78cf..05ad3343 100644
+--- a/util.c
++++ b/util.c
+@@ -2056,12 +2056,13 @@ unsigned int __invalid_size_argument_for_IOC = 0;
+ 
+ /**
+  * disk_fd_matches_criteria() - check if device matches spare criteria.
++ * @st: supertype, not NULL.
+  * @disk_fd: file descriptor of the disk.
+  * @sc: criteria to test.
+  *
+  * Return: true if disk matches criteria, false otherwise.
+  */
+-bool disk_fd_matches_criteria(int disk_fd, struct spare_criteria *sc)
++bool disk_fd_matches_criteria(struct supertype *st, int disk_fd, struct spare_criteria *sc)
+ {
+ 	unsigned int dev_sector_size = 0;
+ 	unsigned long long dev_size = 0;
+@@ -2076,17 +2077,21 @@ bool disk_fd_matches_criteria(int disk_fd, struct spare_criteria *sc)
+ 	    sc->sector_size != dev_sector_size)
+ 		return false;
+ 
++	if (drive_test_and_add_policies(st, &sc->pols, disk_fd, 0))
++		return false;
++
+ 	return true;
+ }
+ 
+ /**
+  * devid_matches_criteria() - check if device referenced by devid matches spare criteria.
++ * @st: supertype, not NULL.
+  * @devid: devid of the device to check.
+  * @sc: criteria to test.
+  *
+  * Return: true if disk matches criteria, false otherwise.
+  */
+-bool devid_matches_criteria(dev_t devid, struct spare_criteria *sc)
++bool devid_matches_criteria(struct supertype *st, dev_t devid, struct spare_criteria *sc)
+ {
+ 	char buf[NAME_MAX];
+ 	bool ret;
+@@ -2102,7 +2107,7 @@ bool devid_matches_criteria(dev_t devid, struct spare_criteria *sc)
+ 		return false;
+ 
+ 	/* Error code inherited */
+-	ret = disk_fd_matches_criteria(fd, sc);
++	ret = disk_fd_matches_criteria(st, fd, sc);
+ 
+ 	close(fd);
+ 	return ret;
+@@ -2137,7 +2142,7 @@ struct mdinfo *container_choose_spares(struct supertype *st,
+ 		if (d->disk.state == 0) {
+ 			dev_t dev = makedev(d->disk.major,d->disk.minor);
+ 
+-			found = devid_matches_criteria(dev, criteria);
++			found = devid_matches_criteria(st, dev, criteria);
+ 
+ 			/* check if domain matches */
+ 			if (found && domlist) {
+-- 
+2.40.1
+

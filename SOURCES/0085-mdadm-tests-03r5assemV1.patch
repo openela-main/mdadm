@@ -1,0 +1,52 @@
+From 6077e9248acda8c70df58fabc8de23195c19a0cf Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 22 May 2024 16:50:47 +0800
+Subject: [PATCH 085/157] mdadm/tests: 03r5assemV1
+
+dcc22ae74a864 ('super1: remove support for name= in config') already
+removes name= support. So remove related test codes in 03r5assemV1.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ tests/03r5assemV1 | 17 -----------------
+ 1 file changed, 17 deletions(-)
+
+diff --git a/tests/03r5assemV1 b/tests/03r5assemV1
+index bca0c583..6026011e 100644
+--- a/tests/03r5assemV1
++++ b/tests/03r5assemV1
+@@ -31,14 +31,6 @@ conf=$targetdir/mdadm.conf
+ mdadm -As -c $conf $md1
+ eval $tst
+ 
+-{
+-  echo DEVICE $devlist
+-  echo array $md1 name=one
+-} > $conf
+-
+-mdadm -As -c $conf
+-eval $tst
+-
+ {
+   echo DEVICE $devlist
+   echo array $md1 devices=$dev0,$dev1,$dev2,$dev3,$dev4
+@@ -88,15 +80,6 @@ mdadm -As -c $conf $md1
+ check state U_U
+ eval $tst
+ 
+-{
+-  echo DEVICE $devlist
+-  echo array $md1 name=one
+-} > $conf
+-
+-mdadm -As -c $conf
+-check state U_U
+-eval $tst
+-
+ {
+   echo DEVICE $devlist
+   echo array $md1 devices=$dev0,$dev1,$dev2
+-- 
+2.41.0
+

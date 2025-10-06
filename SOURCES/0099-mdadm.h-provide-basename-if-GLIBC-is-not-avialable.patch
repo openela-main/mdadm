@@ -1,0 +1,37 @@
+From 9dbd11e091f84eb0bf9d717283774816c4c4453d Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Tue, 21 May 2024 16:26:33 +0200
+Subject: [PATCH 099/157] mdadm.h: provide basename if GLIBC is not avialable
+
+If GNU basename is not avilable, define it. It is safer to use that
+rather than include libgen.h with XPG basename() definition.
+
+Fixes:#12
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ mdadm.h | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/mdadm.h b/mdadm.h
+index 40818941..e9f764a2 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -223,6 +223,14 @@ struct dlm_lksb {
+ struct __una_u16 { __u16 x; } __attribute__ ((packed));
+ struct __una_u32 { __u32 x; } __attribute__ ((packed));
+ 
++/*
++ * Ensure GNU basename behavior on GLIBC less systems.
++ */
++#ifndef __GLIBC__
++#define basename(path) \
++       (strrchr((path), '/') ? strrchr((path),'/') + 1 : (path))
++#endif
++
+ static inline __u16 __get_unaligned16(const void *p)
+ {
+ 	const struct __una_u16 *ptr = (const struct __una_u16 *)p;
+-- 
+2.41.0
+

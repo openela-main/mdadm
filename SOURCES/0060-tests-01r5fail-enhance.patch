@@ -1,0 +1,41 @@
+From d399c494c6364a6b6d0f965c08443fdc79d1e248 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Thu, 18 Apr 2024 18:23:19 +0800
+Subject: [PATCH 60/66] tests/01r5fail enhance
+
+After removing dev0, the recovery starts because it already has a spare
+disk. It's good to check recovery. But it's not right to check recovery
+after adding dev3. Because the recovery may finish. It depends on the
+recovery performance of the testing machine. If the recovery finishes,
+it will fail. But dev3 is only added as a spare disk, we can't expect
+there is a recovery happens.
+
+So remove the codes about adding dev3.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ tests/01r5fail | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/tests/01r5fail b/tests/01r5fail
+index 873dba58..c210d6e7 100644
+--- a/tests/01r5fail
++++ b/tests/01r5fail
+@@ -17,11 +17,7 @@ check wait
+ mdadm $md0 --fail $dev0
+ mdadm $md0 --remove $dev3 $dev0
+ check recovery
+-check state _UUU
+-
+-mdadm $md0 -a $dev3
+-check recovery
+ check wait
+ check state UUUU
+ 
+-mdadm -S $md0
+\ No newline at end of file
++mdadm -S $md0
+-- 
+2.41.0
+

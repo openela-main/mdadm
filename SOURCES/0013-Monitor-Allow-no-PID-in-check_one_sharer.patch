@@ -1,0 +1,43 @@
+From 3c3ddeeccc1eb4accb62ce9920de430a564be806 Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Wed, 28 Feb 2024 16:37:20 +0100
+Subject: [PATCH 13/41] Monitor: Allow no PID in check_one_sharer()
+
+Commit 5fb5479ad100 ("Monitor: open file before check in
+check_one_sharer()") introduced a regression that prohibits monitor
+from starting if PID file does not exist.
+
+Add check for no PID file.
+Add missing fclose().
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Monitor.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/Monitor.c b/Monitor.c
+index 7cee95d4..9be2b528 100644
+--- a/Monitor.c
++++ b/Monitor.c
+@@ -453,12 +453,17 @@ static int check_one_sharer(int scan)
+ 
+ 	fp = fopen(AUTOREBUILD_PID_PATH, "r");
+ 	if (!fp) {
++		/* PID file does not exist */
++		if (errno == ENOENT)
++			return 0;
++
+ 		pr_err("Cannot open %s file.\n", AUTOREBUILD_PID_PATH);
+ 		return 2;
+ 	}
+ 
+ 	if (!is_file(AUTOREBUILD_PID_PATH)) {
+ 		pr_err("%s is not a regular file.\n", AUTOREBUILD_PID_PATH);
++		fclose(fp);
+ 		return 2;
+ 	}
+ 
+-- 
+2.40.1
+

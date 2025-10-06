@@ -1,0 +1,49 @@
+From e7623d5ae4724c72e873e8af17f2ed6bfdc54427 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Fri, 26 Jul 2024 15:14:08 +0800
+Subject: [PATCH 142/157] mdadm/mdmon: fix coverity issue RESOURCE_LEAK
+
+Fix resource leak problem in mdmon.c
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ mdmon.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/mdmon.c b/mdmon.c
+index cae63841..6e28b56e 100644
+--- a/mdmon.c
++++ b/mdmon.c
+@@ -456,22 +456,25 @@ static int mdmon(char *devnm, int must_fork, int takeover)
+ 	if (must_fork) {
+ 		if (pipe(pfd) != 0) {
+ 			pr_err("failed to create pipe\n");
++			close_fd(&mdfd);
+ 			return 1;
+ 		}
+ 		switch(fork()) {
+ 		case -1:
+ 			pr_err("failed to fork: %s\n", strerror(errno));
++			close_fd(&mdfd);
+ 			return 1;
+ 		case 0: /* child */
+-			close(pfd[0]);
++			close_fd(&pfd[0]);
+ 			break;
+ 		default: /* parent */
+-			close(pfd[1]);
++			close_fd(&pfd[1]);
+ 			if (read(pfd[0], &status, sizeof(status)) != sizeof(status)) {
+ 				wait(&status);
+ 				status = WEXITSTATUS(status);
+ 			}
+-			close(pfd[0]);
++			close_fd(&pfd[0]);
++			close_fd(&mdfd);
+ 			return status;
+ 		}
+ 	} else
+-- 
+2.41.0
+

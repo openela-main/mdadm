@@ -1,0 +1,39 @@
+From 8032700b7a44df2dd54af478940938958c08dcf0 Mon Sep 17 00:00:00 2001
+From: Blazej Kucman <blazej.kucman@intel.com>
+Date: Wed, 20 Nov 2024 16:50:25 +0100
+Subject: [PATCH 1/1] imsm: fix tpv drvies check in add_to_super
+
+Before the mentioned patch, the check to verify if IMSM on current
+platform supports a use of TPV (other than Intel) disk, was only performed
+for non-Intel disks, after it is performed for all. This change causes
+inability to use any disk when platform does not support TPV drives,
+attempt results in the following error.
+
+mdadm:  Platform configuration does not support non-Intel NVMe drives.
+        Please refer to Intel(R) RSTe/VROC user guide.
+
+This change restores the check if the disk is non-Intel.
+
+Fixes: 734e7db4dfc5 ("imsm: Remove warning and refactor add_to_super_imsm code")
+Signed-off-by: Blazej Kucman <blazej.kucman@intel.com>
+---
+ super-intel.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/super-intel.c b/super-intel.c
+index 9c464945d09c..7e3c5f2b7047 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -6121,7 +6121,8 @@ static int add_to_super_imsm(struct supertype *st, mdu_disk_info_t *dk,
+ 			pr_err("%s controller supports Multi-Path I/O, Intel (R) VROC does not support multipathing\n",
+ 			       basename(cntrl_path));
+ 
+-		if (super->orom && !imsm_orom_has_tpv_support(super->orom)) {
++		if (super->orom && devpath_to_vendor(pci_dev_path) != 0x8086 &&
++		    !imsm_orom_has_tpv_support(super->orom)) {
+ 			pr_err("\tPlatform configuration does not support non-Intel NVMe drives.\n"
+ 			       "\tPlease refer to Intel(R) RSTe/VROC user guide.\n");
+ 			goto error;
+-- 
+2.32.0 (Apple Git-132)
+

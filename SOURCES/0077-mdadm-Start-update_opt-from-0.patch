@@ -1,0 +1,40 @@
+From 296398299391b10650bdd79d986b115588e60590 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 22 May 2024 16:50:39 +0800
+Subject: [PATCH 077/157] mdadm: Start update_opt from 0
+
+Before f2e8393bd722 ('Manage&Incremental: code refactor, string to enum'), it uses
+NULL to represent it doesn't need to update. So init UOPT_UNDEFINED to 0. This
+problem is found by test case 05r6tor0.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ mdadm.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/mdadm.h b/mdadm.h
+index b71d7b32..40818941 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -535,7 +535,8 @@ enum special_options {
+ };
+ 
+ enum update_opt {
+-	UOPT_NAME = 1,
++	UOPT_UNDEFINED = 0,
++	UOPT_NAME,
+ 	UOPT_PPL,
+ 	UOPT_NO_PPL,
+ 	UOPT_BITMAP,
+@@ -575,7 +576,6 @@ enum update_opt {
+ 	UOPT_SPEC_FAILFAST,
+ 	UOPT_SPEC_NOFAILFAST,
+ 	UOPT_SPEC_REVERT_RESHAPE_NOBACKUP,
+-	UOPT_UNDEFINED
+ };
+ extern void fprint_update_options(FILE *outf, enum update_opt update_mode);
+ 
+-- 
+2.41.0
+

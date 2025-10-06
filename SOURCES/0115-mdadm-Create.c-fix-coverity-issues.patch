@@ -1,0 +1,45 @@
+From 7c524aa83c4463c15a13f6f47a27a18ab4de9eef Mon Sep 17 00:00:00 2001
+From: Nigel Croxon <ncroxon@redhat.com>
+Date: Fri, 5 Jul 2024 08:45:32 -0400
+Subject: [PATCH 115/157] mdadm: Create.c fix coverity issues
+
+* Event negative_returns: "fd" is passed to a parameter that cannot be negative. Which
+is set to -1 to start.
+
+* Event open_fn: Returning handle opened by "open_dev_excl".
+* Event var_assign: Assigning: "container_fd" = handle returned from
+"open_dev_excl(st->container_devnm)"
+* Event leaked_handle: Handle variable "container_fd" going out of scope leaks the handle
+
+Signed-off-by: Nigel Croxon <ncroxon@redhat.com>
+---
+ Create.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/Create.c b/Create.c
+index 479c2715..7fde1c16 100644
+--- a/Create.c
++++ b/Create.c
+@@ -297,7 +297,7 @@ static int add_disk_to_super(int mdfd, struct shape *s, struct context *c,
+ 	if (st->ss->add_to_super(st, &info->disk, fd, dv->devname,
+ 				 dv->data_offset)) {
+ 		ioctl(mdfd, STOP_ARRAY, NULL);
+-		close(fd);
++		close_fd(&fd);
+ 		return 1;
+ 	}
+ 	st->ss->getinfo_super(st, info, NULL);
+@@ -1370,8 +1370,8 @@ int Create(struct supertype *st, struct mddev_ident *ident, int subdevs,
+ 	map_remove(&map, fd2devnm(mdfd));
+ 	map_unlock(&map);
+ 
+-	if (mdfd >= 0)
+-		close(mdfd);
++	close_fd(&mdfd);
++	close_fd(&container_fd);
+ 
+ 	dev_policy_free(custom_pols);
+ 	return 1;
+-- 
+2.41.0
+

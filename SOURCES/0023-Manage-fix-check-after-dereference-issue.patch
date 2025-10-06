@@ -1,0 +1,64 @@
+From e97ca3583c96591af0e4863c12c394074a51c84d Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Thu, 29 Feb 2024 12:52:07 +0100
+Subject: [PATCH 23/41] Manage: fix check after dereference issue
+
+The code dereferences dev_st earlier without checking, it gives SAST
+problem.
+
+dev_st is needed for attempt_re_add(), but it is executed only if
+dv->disposition != 'S', so move disposition check up.
+
+tst is a must to reach this place, dup_super() have to return valid
+pointer, all it needs to check is if load_super() returns superblock.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Manage.c | 26 ++++++++++++--------------
+ 1 file changed, 12 insertions(+), 14 deletions(-)
+
+diff --git a/Manage.c b/Manage.c
+index 30302ac8..77b79cf5 100644
+--- a/Manage.c
++++ b/Manage.c
+@@ -794,25 +794,23 @@ int Manage_add(int fd, int tfd, struct mddev_dev *dv,
+ 		 * simply re-add it.
+ 		 */
+ 
+-		if (array->not_persistent == 0) {
++		if (array->not_persistent == 0 && dv->disposition != 'S') {
++			int rv = 0;
++
+ 			dev_st = dup_super(tst);
+ 			dev_st->ss->load_super(dev_st, tfd, NULL);
+-			if (dev_st->sb && dv->disposition != 'S') {
+-				int rv;
+ 
+-				rv = attempt_re_add(fd, tfd, dv, dev_st, tst,
+-						    rdev, update, devname,
+-						    verbose, array);
+-				dev_st->ss->free_super(dev_st);
+-				if (rv) {
+-					free(dev_st);
+-					return rv;
+-				}
+-			}
+-			if (dev_st) {
++			if (dev_st->sb) {
++				rv = attempt_re_add(fd, tfd, dv, dev_st, tst, rdev, update,
++						    devname, verbose, array);
++
+ 				dev_st->ss->free_super(dev_st);
+-				free(dev_st);
+ 			}
++
++			free(dev_st);
++
++			if (rv)
++				return rv;
+ 		}
+ 		if (dv->disposition == 'M') {
+ 			if (verbose > 0)
+-- 
+2.40.1
+

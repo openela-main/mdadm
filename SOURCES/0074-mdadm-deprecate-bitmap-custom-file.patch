@@ -1,0 +1,438 @@
+From 50b100768a115526f5029113af957658ef76b383 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Fri, 29 Mar 2024 15:21:54 +0100
+Subject: [PATCH 074/157] mdadm: deprecate bitmap custom file
+
+This option has been deprecated in kernel by Christoph in commit
+0ae1c9d38426 ("md: deprecate bitmap file support"). Do the same in
+mdadm.
+
+With this change, user must acknowledge it, it is not
+skippable. The implementation of custom bitmap file looks like it's
+abandoned. It cannot be done by Incremental so it is not respected by
+any udev based system and it seems to not be recorded by metadata.
+User must assemble such volume manually.
+
+Tests for bitmap custom file are removed because now they will not
+pass because interaction with user is mandatory.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ mdadm.8.in               | 34 +++++++++----------
+ mdadm.c                  | 70 +++++++++++++++++++++++++++-------------
+ tests/05r1-bitmapfile    | 49 ----------------------------
+ tests/05r1-grow-external | 33 -------------------
+ tests/05r1-n3-bitmapfile | 53 ------------------------------
+ tests/05r5-bitmapfile    | 49 ----------------------------
+ tests/05r6-bitmapfile    | 49 ----------------------------
+ 7 files changed, 62 insertions(+), 275 deletions(-)
+ delete mode 100644 tests/05r1-bitmapfile
+ delete mode 100644 tests/05r1-grow-external
+ delete mode 100644 tests/05r1-n3-bitmapfile
+ delete mode 100644 tests/05r5-bitmapfile
+ delete mode 100644 tests/05r6-bitmapfile
+
+diff --git a/mdadm.8.in b/mdadm.8.in
+index 9ba66825..aa0c5403 100644
+--- a/mdadm.8.in
++++ b/mdadm.8.in
+@@ -727,29 +727,25 @@ same as
+ 
+ .TP
+ .BR \-b ", " \-\-bitmap=
+-Specify a file to store a write-intent bitmap in.  The file should not
+-exist unless
+-.B \-\-force
+-is also given.  The same file should be provided
+-when assembling the array.  If the word
+-.B "internal"
+-is given, then the bitmap is stored with the metadata on the array,
+-and so is replicated on all devices.  If the word
+-.B "none"
+-is given with
+-.B \-\-grow
+-mode, then any bitmap that is present is removed. If the word
+-.B "clustered"
+-is given, the array is created for a clustered environment. One bitmap
+-is created for each node as defined by the
++Specify how to store a write-intent bitmap.  Following values are supported:
++
++.B internal
++- the bitmap is stored with the metadata on the array and so is replicated on all devices.
++
++.B clustered
++- the array is created for a clustered environment. One bitmap is created for each node as defined
++by the
+ .B \-\-nodes
+ parameter and are stored internally.
+ 
+-To help catch typing errors, the filename must contain at least one
+-slash ('/') if it is a real file (not 'internal' or 'none').
++.B none
++- create array with no bitmap or remove any present bitmap (grow mode).
+ 
+-Note: external bitmaps are only known to work on ext2 and ext3.
+-Storing bitmap files on other filesystems may result in serious problems.
++Setting bitmap for file is deprecated and should not be used. The file should not exist unless
++.B \-\-force
++is also given. The same file should be provided when assembling the array. The file name must
++contain at least one slash ('/'). Bitmap files are only known to work on ext2 and ext3. Storing
++bitmap files on other filesystems may result in serious problems.
+ 
+ When creating an array on devices which are 100G or larger,
+ .I mdadm
+diff --git a/mdadm.c b/mdadm.c
+index d18619db..0b99fad4 100644
+--- a/mdadm.c
++++ b/mdadm.c
+@@ -29,6 +29,51 @@
+ #include "md_p.h"
+ #include <ctype.h>
+ 
++/**
++ * set_bitmap_value() - set bitmap value.
++ * @s: Shape.
++ * @c: Context.
++ * @val: value to set.
++ *
++ * Validate and set bitmap. Context is needed for setting nodes for clustered bitmap.
++ */
++static mdadm_status_t set_bitmap_value(struct shape *s, struct context *c, char *val)
++{
++	if (s->bitmap_file) {
++		pr_err("--bitmap cannot be set twice. Second value: \"%s\".\n", val);
++		return MDADM_STATUS_ERROR;
++	}
++
++	if (strcmp(val, "internal") == 0 || strcmp(optarg, STR_COMMON_NONE) == 0) {
++		s->bitmap_file = val;
++		return MDADM_STATUS_SUCCESS;
++	}
++
++	if (strcmp(val, "clustered") == 0) {
++		s->bitmap_file = val;
++		/* Set the default number of cluster nodes
++		 * to 4 if not already set by user
++		 */
++		if (c->nodes < 1)
++			c->nodes = 4;
++		return MDADM_STATUS_SUCCESS;
++	}
++
++	if (strchr(val, '/')) {
++		pr_info("Custom write-intent bitmap file option is deprecated.\n");
++		if (ask("Do you want to continue? (y/n)")) {
++			s->bitmap_file = val;
++			return MDADM_STATUS_SUCCESS;
++		}
++
++		return MDADM_STATUS_ERROR;
++	}
++
++	pr_err("--bitmap value must contain a '/' or be 'internal', 'clustered' or 'none'\n");
++	pr_err("Current value is \"%s\"", val);
++	return MDADM_STATUS_ERROR;
++}
++
+ static int scan_assemble(struct supertype *ss,
+ 			 struct context *c,
+ 			 struct mddev_ident *ident);
+@@ -1094,30 +1139,9 @@ int main(int argc, char *argv[])
+ 		case O(CREATE,Bitmap): /* here we create the bitmap */
+ 		case O(GROW,'b'):
+ 		case O(GROW,Bitmap):
+-			if (s.bitmap_file) {
+-				pr_err("bitmap cannot be set twice. Second value: %s.\n", optarg);
++			if (set_bitmap_value(&s, &c, optarg))
+ 				exit(2);
+-			}
+-			if (strcmp(optarg, "internal") == 0 ||
+-			    strcmp(optarg, STR_COMMON_NONE) == 0 ||
+-			    strchr(optarg, '/') != NULL) {
+-				s.bitmap_file = optarg;
+-				continue;
+-			}
+-			if (strcmp(optarg, "clustered") == 0) {
+-				s.bitmap_file = optarg;
+-				/* Set the default number of cluster nodes
+-				 * to 4 if not already set by user
+-				 */
+-				if (c.nodes < 1)
+-					c.nodes = 4;
+-				continue;
+-			}
+-			/* probable typo */
+-			pr_err("bitmap file must contain a '/', or be 'internal', or be 'clustered', or 'none'\n"
+-				"       not '%s'\n", optarg);
+-			exit(2);
+-
++			continue;
+ 		case O(GROW,BitmapChunk):
+ 		case O(BUILD,BitmapChunk):
+ 		case O(CREATE,BitmapChunk): /* bitmap chunksize */
+diff --git a/tests/05r1-bitmapfile b/tests/05r1-bitmapfile
+deleted file mode 100644
+index f384f0ea..00000000
+--- a/tests/05r1-bitmapfile
++++ /dev/null
+@@ -1,49 +0,0 @@
+-
+-#
+-# create a raid1 with a bitmap file
+-#
+-bmf=$targetdir/bitmap
+-rm -f $bmf
+-mdadm --create --run $md0 --level=1 -n2 --delay=1  --bitmap $bmf $dev1 $dev2
+-check wait
+-testdev $md0 1 $mdsize1a 64
+-mdadm -S $md0
+-
+-mdadm --assemble $md0 --bitmap=$bmf $dev1 $dev2
+-testdev $md0 1 $mdsize1a 64
+-dirty1=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-sleep 4
+-dirty2=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-if [ $dirty1 -lt 400 -o $dirty2 -ne 0 ]
+-then  echo >&2 "ERROR bad 'dirty' counts: $dirty1 and $dirty2"
+-  exit 1
+-fi
+-mdadm $md0 -f $dev1
+-testdev $md0 1 $mdsize1a 64
+-sleep 4
+-dirty3=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-if [ $dirty3 -lt 400 ]
+-then
+-   echo >&2 "ERROR dirty count $dirty3 is too small"
+-   exit 2
+-fi
+-
+-mdadm -S $md0
+-
+-mdadm --assemble -R $md0 --bitmap=$bmf $dev2
+-dirty4=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-mdadm --zero $dev1 # force --add, not --re-add
+-mdadm $md0 --add $dev1
+-#it is too fast# check recovery
+-
+-check wait
+-sleep 4
+-dirty5=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-if [ $dirty4 -lt 400 -o $dirty5 -ne 0 ]
+-then echo echo >&2 "ERROR bad 'dirty' counts at end: $dirty4 $dirty5"
+-  exit 1
+-fi
+-
+-mdadm -S $md0
+diff --git a/tests/05r1-grow-external b/tests/05r1-grow-external
+deleted file mode 100644
+index 69da3e90..00000000
+--- a/tests/05r1-grow-external
++++ /dev/null
+@@ -1,33 +0,0 @@
+-
+-#
+-# create a raid1 array, add an external bitmap
+-#
+-mdadm --create --run $md0 -l 1 -n 2 $dev1 $dev2
+-check wait
+-testdev $md0 1 $mdsize1a 64
+-
+-bmf=$targetdir/bm
+-rm -f $bmf
+-#mdadm -E $dev1
+-mdadm --grow $md0 --bitmap=$bmf --delay=1 || { mdadm -X $bmf ; exit 1; }
+-dirty1=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-sleep 4
+-dirty2=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-testdev $md0 1 $mdsize1a 64
+-dirty3=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-sleep 4
+-dirty4=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-#echo $dirty1 $dirty2 $dirty3 $dirty4
+-if [ $dirty2 -ne 0 -o $dirty4 -ne 0 -o $dirty3 -lt 400 ]
+-then
+-   echo bad dirty counts
+-   exit 1
+-fi
+-
+-# now to remove the bitmap
+-check bitmap
+-mdadm --grow $md0 --bitmap=none
+-check nobitmap
+-mdadm -S $md0
+diff --git a/tests/05r1-n3-bitmapfile b/tests/05r1-n3-bitmapfile
+deleted file mode 100644
+index f1c3f1ee..00000000
+--- a/tests/05r1-n3-bitmapfile
++++ /dev/null
+@@ -1,53 +0,0 @@
+-
+-#
+-# create a raid1 with 3 devices and a bitmap file
+-# make  sure resync does right thing.
+-#
+-#
+-bmf=$targetdir/bitmap
+-rm -f $bmf
+-mdadm --create -e0.90 --run $md0 --level=1 -n3 --delay=1  --bitmap $bmf $dev1 $dev2 $dev3
+-check wait
+-testdev $md0 1 $mdsize0 64
+-mdadm -S $md0
+-
+-mdadm --assemble $md0 --bitmap=$bmf $dev1 $dev2 $dev3
+-testdev $md0 1 $mdsize0 64
+-dirty1=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-sleep 4
+-dirty2=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-if [ $dirty1 -lt 400 -o $dirty2 -ne 0 ]
+-then  echo >&2 "ERROR bad 'dirty' counts: $dirty1 and $dirty2"
+-  exit 1
+-fi
+-mdadm $md0 -f $dev2
+-testdev $md0 1 $mdsize0 64
+-sleep 4
+-dirty3=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-if [ $dirty3 -lt 400 ]
+-then
+-   echo >&2 "ERROR dirty count $dirty3 is too small"
+-   exit 2
+-fi
+-
+-mdadm -S $md0
+-
+-mdadm --assemble -R $md0 --bitmap=$bmf $dev1 $dev3
+-check nosync
+-mdadm --zero-superblock $dev2
+-mdadm $md0 --add $dev2
+-check recovery
+-
+-dirty4=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-check wait
+-sleep 4
+-dirty5=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-if [ $dirty4 -lt 400 -o $dirty5 -ne 0 ]
+-then echo echo >&2 "ERROR bad 'dirty' counts at end: $dirty4 $dirty5"
+-  exit 1
+-fi
+-
+-mdadm -S $md0
+-exit 0
+diff --git a/tests/05r5-bitmapfile b/tests/05r5-bitmapfile
+deleted file mode 100644
+index 6d173d88..00000000
+--- a/tests/05r5-bitmapfile
++++ /dev/null
+@@ -1,49 +0,0 @@
+-
+-#
+-# create a raid1 with a bitmap file
+-#
+-bmf=$targetdir/bitmap
+-rm -f $bmf
+-mdadm --create --run $md0 --level=5 -n3 --delay=1  --bitmap $bmf $dev1 $dev2 $dev3
+-check wait
+-testdev $md0 2 $mdsize1 512
+-mdadm -S $md0
+-
+-mdadm --assemble $md0 --bitmap=$bmf $dev1 $dev2 $dev3
+-testdev $md0 2 $mdsize1 512
+-dirty1=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-sleep 4
+-dirty2=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-if [ $dirty1 -lt 400 -o $dirty2 -ne 0 ]
+-then  echo >&2 "ERROR bad 'dirty' counts: $dirty1 and $dirty2"
+-  exit 1
+-fi
+-mdadm $md0 -f $dev1
+-testdev $md0 2 $mdsize1 512
+-sleep 4
+-dirty3=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-if [ $dirty3 -lt 400 ]
+-then
+-   echo >&2 "ERROR dirty count $dirty3 is too small"
+-   exit 2
+-fi
+-
+-mdadm -S $md0
+-
+-mdadm --assemble -R $md0 --bitmap=$bmf $dev2 $dev3
+-mdadm --zero $dev1 # force add, not re-add
+-mdadm $md0 --add $dev1
+-check recovery
+-
+-dirty4=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-check wait
+-sleep 4
+-dirty5=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-if [ $dirty4 -lt 400 -o $dirty5 -ne 0 ]
+-then echo echo >&2 "ERROR bad 'dirty' counts at end: $dirty4 $dirty5"
+-  exit 1
+-fi
+-
+-mdadm -S $md0
+diff --git a/tests/05r6-bitmapfile b/tests/05r6-bitmapfile
+deleted file mode 100644
+index d11896db..00000000
+--- a/tests/05r6-bitmapfile
++++ /dev/null
+@@ -1,49 +0,0 @@
+-
+-#
+-# create a raid1 with a bitmap file
+-#
+-bmf=$targetdir/bitmap
+-rm -f $bmf
+-mdadm --create --run $md0 --level=6 -n4 --delay=1  --bitmap $bmf $dev1 $dev2 $dev3 $dev4
+-check wait
+-testdev $md0 2 $mdsize1 512
+-mdadm -S $md0
+-
+-mdadm --assemble $md0 --bitmap=$bmf $dev1 $dev2 $dev3 $dev4
+-testdev $md0 2 $mdsize1 512
+-dirty1=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-sleep 4
+-dirty2=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-if [ $dirty1 -lt 400 -o $dirty2 -ne 0 ]
+-then  echo >&2 "ERROR bad 'dirty' counts: $dirty1 and $dirty2"
+-  exit 1
+-fi
+-mdadm $md0 -f $dev3
+-testdev $md0 2 $mdsize1 512
+-sleep 4
+-dirty3=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-if [ $dirty3 -lt 400 ]
+-then
+-   echo >&2 "ERROR dirty count $dirty3 is too small"
+-   exit 2
+-fi
+-
+-mdadm -S $md0
+-
+-mdadm --assemble -R $md0 --bitmap=$bmf $dev1 $dev2 $dev4
+-mdadm --zero $dev3 # force --add, not --re-add
+-mdadm $md0 --add $dev3
+-check recovery
+-
+-dirty4=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-check wait
+-sleep 4
+-dirty5=`mdadm -X $bmf | sed -n -e 's/.*Bitmap.* \([0-9]*\) dirty.*/\1/p'`
+-
+-if [ $dirty4 -lt 400 -o $dirty5 -ne 0 ]
+-then echo echo >&2 "ERROR bad 'dirty' counts at end: $dirty4 $dirty5"
+-  exit 1
+-fi
+-
+-mdadm -S $md0
+-- 
+2.41.0
+

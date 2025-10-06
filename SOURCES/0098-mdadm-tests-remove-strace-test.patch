@@ -1,0 +1,44 @@
+From c5a4fe7874f94b3f172027043f9a94b037f4d4dd Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Tue, 28 May 2024 21:51:50 +0800
+Subject: [PATCH 098/157] mdadm/tests: remove strace test
+
+Some tests will fail if the test env doesn't have strace
+commands. So remove the dependency.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ tests/07revert-grow    | 2 +-
+ tests/07revert-inplace | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/07revert-grow b/tests/07revert-grow
+index c8c4e855..333483dc 100644
+--- a/tests/07revert-grow
++++ b/tests/07revert-grow
+@@ -43,7 +43,7 @@ testdev $md0 2 $mdsize1 512
+ mdadm -G $md0 -n 5
+ sleep 3
+ mdadm -S $md0
+-strace -o /tmp/str ./mdadm -A $md0 --update=revert-reshape $devlist4
++mdadm -A $md0 --update=revert-reshape $devlist4
+ check wait
+ check raid10
+ testdev $md0 2 $mdsize1 512
+diff --git a/tests/07revert-inplace b/tests/07revert-inplace
+index a73eb977..776324ac 100644
+--- a/tests/07revert-inplace
++++ b/tests/07revert-inplace
+@@ -37,7 +37,7 @@ testdev $md0 3 $mdsize1 64
+ mdadm -G $md0 -c 32
+ sleep 2
+ mdadm -S $md0
+-strace -o /tmp/str ./mdadm -A $md0 --update=revert-reshape $devlist5
++mdadm -A $md0 --update=revert-reshape $devlist5
+ check wait
+ check raid10
+ testdev $md0 3 $mdsize1 64
+-- 
+2.41.0
+

@@ -1,0 +1,84 @@
+From 2bb4efb504d0991eaba755242d3e70facb5d994b Mon Sep 17 00:00:00 2001
+From: Blazej Kucman <blazej.kucman@intel.com>
+Date: Tue, 23 Jul 2024 12:45:10 +0200
+Subject: [PATCH 129/157] drive_encryption: Fix ata passthrough12 verify
+
+Based on documentation SCSI Primary Commands - 4 (SPC-4) only first 7 bits
+of first byte in sense data are used to store response code. The current
+verification uses all 8 bits for comparison of response code.
+
+Incorrect verification may make impossible to use SATA disks with IMSM,
+because IMSM requires verification of the encryption state before use.
+
+There was issue in kernel libata [1]. This issue hides bug in mdadm because
+last bit was not set.
+
+Example output with affected mdadm:
+
+          Port3 : /dev/sde (BTPR212503EK120LGN)
+mdadm: Failed ata passthrough12 ioctl. Device: /dev/sde.
+mdadm: Failed to get drive encryption information
+
+The fix is use the first 7 bits of Byte 0, to compare with the expected
+values.
+
+[1] https://git.kernel.org/pub/scm/linux/kernel/git/libata/linux.git/commit/?id=38dab832c3f4
+
+Fixes: df38df3052c3 ("Add reading SATA encryption information")
+Signed-off-by: Blazej Kucman <blazej.kucman@intel.com>
+---
+ drive_encryption.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/drive_encryption.c b/drive_encryption.c
+index a4ad799f..63bdab1a 100644
+--- a/drive_encryption.c
++++ b/drive_encryption.c
+@@ -65,6 +65,7 @@
+ #define SENSE_DATA_CURRENT_FIXED (0x70)
+ #define SENSE_DATA_CURRENT_DESC (0x72)
+ #define SENSE_CURRENT_RES_DESC_POS (8)
++#define SENSE_RESPONSE_CODE_MASK (0x7f)
+ #define SG_DRIVER_SENSE	(0x08)
+ 
+ typedef enum drive_feature_support_status {
+@@ -473,6 +474,7 @@ ata_pass_through12_ioctl(int disk_fd, __u8 ata_command,  __u8 sec_protocol, __u1
+ {
+ 	__u8 cdb[ATA_INQUIRY_LENGTH] = {0};
+ 	__u8 sense[SG_SENSE_SIZE] = {0};
++	__u8 sense_response_code;
+ 	__u8 *sense_desc = NULL;
+ 	sg_io_hdr_t sg = {0};
+ 
+@@ -517,15 +519,17 @@ ata_pass_through12_ioctl(int disk_fd, __u8 ata_command,  __u8 sec_protocol, __u1
+ 		return MDADM_STATUS_ERROR;
+ 	}
+ 
++	sense_response_code = sense[0] & SENSE_RESPONSE_CODE_MASK;
+ 	/* verify expected sense response code */
+-	if (!(sense[0] == SENSE_DATA_CURRENT_DESC || sense[0] == SENSE_DATA_CURRENT_FIXED)) {
++	if (!(sense_response_code == SENSE_DATA_CURRENT_DESC ||
++	      sense_response_code == SENSE_DATA_CURRENT_FIXED)) {
+ 		pr_vrb("Failed ata passthrough12 ioctl. Device: /dev/%s.\n", fd2kname(disk_fd));
+ 		return MDADM_STATUS_ERROR;
+ 	}
+ 
+ 	sense_desc = sense + SENSE_CURRENT_RES_DESC_POS;
+ 	/* verify sense data current response with descriptor format */
+-	if (sense[0] == SENSE_DATA_CURRENT_DESC &&
++	if (sense_response_code == SENSE_DATA_CURRENT_DESC &&
+ 	    !(sense_desc[0] == ATA_STATUS_RETURN_DESCRIPTOR &&
+ 	    sense_desc[1] == ATA_INQUIRY_LENGTH)) {
+ 		pr_vrb("Failed ata passthrough12 ioctl. Device: /dev/%s. Sense data ASC: %d, ASCQ: %d.\n",
+@@ -534,7 +538,7 @@ ata_pass_through12_ioctl(int disk_fd, __u8 ata_command,  __u8 sec_protocol, __u1
+ 	}
+ 
+ 	/* verify sense data current response with fixed format */
+-	if (sense[0] == SENSE_DATA_CURRENT_FIXED &&
++	if (sense_response_code == SENSE_DATA_CURRENT_FIXED &&
+ 	    !(sense[12] == ATA_PT_INFORMATION_AVAILABLE_ASC &&
+ 	    sense[13] == ATA_PT_INFORMATION_AVAILABLE_ASCQ)) {
+ 		pr_vrb("Failed ata passthrough12 ioctl. Device: /dev/%s. Sense data ASC: %d, ASCQ: %d.\n",
+-- 
+2.41.0
+

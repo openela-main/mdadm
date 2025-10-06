@@ -1,0 +1,29 @@
+From debf421db02c85f176b5eda2e8dcc9d17d89623c Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Fri, 26 Jul 2024 15:14:10 +0800
+Subject: [PATCH 144/157] mdadm/mdopen: fix coverity issue STRING_OVERFLOW
+
+Fix string overflow problems in mdopen.c
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ mdopen.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mdopen.c b/mdopen.c
+index c9fda131..e49defb6 100644
+--- a/mdopen.c
++++ b/mdopen.c
+@@ -376,7 +376,7 @@ int create_mddev(char *dev, char *name, int autof, int trustworthy,
+ 
+ 	sprintf(devname, "/dev/%s", devnm);
+ 
+-	if (dev && dev[0] == '/')
++	if (dev && dev[0] == '/' && strlen(dev) < 400)
+ 		strcpy(chosen, dev);
+ 	else if (cname[0] == 0)
+ 		strcpy(chosen, devname);
+-- 
+2.41.0
+

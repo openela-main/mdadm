@@ -1,0 +1,66 @@
+From 44c2a293260952fbb14db23d1ad07e6066641e0a Mon Sep 17 00:00:00 2001
+From: Anna Sztukowska <anna.sztukowska@intel.com>
+Date: Thu, 11 Jul 2024 14:31:57 +0200
+Subject: [PATCH 151/157] policy.c: Fix check_return issue in Write_rules()
+
+Refactor Write_rules() in policy.c to eliminate check_return issue found
+by SAST analysis. Create udev rules file directly using rule_name
+instead of creating temporary file and renaming it.
+
+Signed-off-by: Anna Sztukowska <anna.sztukowska@intel.com>
+---
+ policy.c | 25 +++++++++----------------
+ 1 file changed, 9 insertions(+), 16 deletions(-)
+
+diff --git a/policy.c b/policy.c
+index dfaafdc0..4d4b248d 100644
+--- a/policy.c
++++ b/policy.c
+@@ -969,19 +969,13 @@ int generate_entries(int fd)
+  */
+ int Write_rules(char *rule_name)
+ {
+-	int fd;
+-	char udev_rule_file[PATH_MAX];
++	int fd = fileno(stdout);
+ 
+-	if (rule_name) {
+-		strncpy(udev_rule_file, rule_name, sizeof(udev_rule_file) - 6);
+-		udev_rule_file[sizeof(udev_rule_file) - 6] = '\0';
+-		strcat(udev_rule_file, ".temp");
+-		fd = creat(udev_rule_file,
+-			   S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+-		if (fd == -1)
+-			return 1;
+-	} else
+-		fd = 1;
++	if (rule_name)
++		fd = creat(rule_name, 0644);
++
++	if (!is_fd_valid(fd))
++		return 1;
+ 
+ 	/* write static invocation */
+ 	if (write(fd, udev_template_start, sizeof(udev_template_start) - 1) !=
+@@ -993,15 +987,14 @@ int Write_rules(char *rule_name)
+ 		goto abort;
+ 
+ 	fsync(fd);
+-	if (rule_name) {
++	if (rule_name)
+ 		close(fd);
+-		rename(udev_rule_file, rule_name);
+-	}
++
+ 	return 0;
+ abort:
+ 	if (rule_name) {
+ 		close(fd);
+-		unlink(udev_rule_file);
++		unlink(rule_name);
+ 	}
+ 	return 1;
+ }
+-- 
+2.41.0
+

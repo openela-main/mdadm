@@ -1,0 +1,61 @@
+From 93c5215677a71e9772f68a449533cb3c97d2b869 Mon Sep 17 00:00:00 2001
+From: Kinga Stefaniuk <kinga.stefaniuk@intel.com>
+Date: Thu, 4 Jul 2024 15:01:06 +0200
+Subject: [PATCH 131/157] Makefile: add more compiler flags
+
+It is essential to avoid vulnerabilities in code as much
+as possible using safe compilation flags. It is easier if
+they are added to the Makefile and applied during compilation.
+Add new gcc flags and make them configurable, because they
+may not be supported for some compilers.
+Set FORTIFY_SOURCE with the highest supported value for platform.
+
+Signed-off-by: Kinga Stefaniuk <kinga.stefaniuk@intel.com>
+---
+ Makefile | 23 ++++++++++++++++++++++-
+ 1 file changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 3fe0a053..a914b178 100644
+--- a/Makefile
++++ b/Makefile
+@@ -30,7 +30,7 @@
+ 
+ # define "CXFLAGS" to give extra flags to CC.
+ # e.g.  make CXFLAGS=-O to optimise
+-CXFLAGS ?=-O2 -D_FORTIFY_SOURCE=2
++CXFLAGS ?=-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE
+ TCC = tcc
+ UCLIBC_GCC = $(shell for nm in i386-uclibc-linux-gcc i386-uclibc-gcc; do which $$nm > /dev/null && { echo $$nm ; exit; } ; done; echo false No uclibc found )
+ #DIET_GCC = diet gcc
+@@ -76,6 +76,27 @@ ifeq ($(origin STRINGOPOVERFLOW), undefined)
+ 	endif
+ endif
+ 
++ifeq ($(origin NOSTRICTOVERFLOW), undefined)
++	NOSTRICTOVERFLOW := $(shell $(CC) -Q --help=warning 2>&1 | grep "strict-overflow" | wc -l)
++	ifneq "$(NOSTRICTOVERFLOW)"  "0"
++	CWFLAGS += -fno-strict-overflow
++	endif
++endif
++
++ifeq ($(origin NODELETENULLPOINTER), undefined)
++	NODELETENULLPOINTER := $(shell $(CC) -Q --help=optimizers 2>&1 | grep "delete-null-pointer-checks" | wc -l)
++	ifneq "$(NODELETENULLPOINTER)"  "0"
++	CWFLAGS += -fno-delete-null-pointer-checks
++	endif
++endif
++
++ifeq ($(origin WRAPV), undefined)
++	WRAPV := $(shell $(CC) -Q --help=optimizers 2>&1 | grep "wrapv" | wc -l)
++	ifneq "$(WRAPV)"  "0"
++	CWFLAGS += -fwrapv
++	endif
++endif
++
+ ifdef DEBIAN
+ CPPFLAGS += -DDEBIAN
+ endif
+-- 
+2.41.0
+
