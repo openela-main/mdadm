@@ -1,0 +1,32 @@
+From f786072a3e2928766a9b4f1b7d3372a601c259ea Mon Sep 17 00:00:00 2001
+From: Shminderjit Singh <shminderjit.singh@oracle.com>
+Date: Mon, 26 Aug 2024 10:06:50 +0000
+Subject: [PATCH 1/1] mdadm: Increase number limit in md device name to 1024.
+
+Updated the maximum device number in md device names from 127 to 1024.
+The previous limit was causing issues in the automation framework.
+This change ensures backward compatibility and allows for future
+scalability.
+
+Fixes: 25aa7329141c ("mdadm: numbered names verification")
+Signed-off-by: Shminderjit Singh <shminderjit.singh@oracle.com>
+---
+ util.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/util.c b/util.c
+index 1cee0feb..2fc0e9f8 100644
+--- a/util.c
++++ b/util.c
+@@ -1003,7 +1003,7 @@ static bool is_devname_numbered(const char *devname, const char *pref, const int
+ 	if (parse_num(&val, devname + pref_len) != 0)
+ 		return false;
+ 
+-	if (val > 127)
++	if (val > 1024)
+ 		return false;
+ 
+ 	return true;
+-- 
+2.48.1
+

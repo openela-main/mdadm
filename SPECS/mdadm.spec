@@ -2,7 +2,7 @@ Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 Name:        mdadm
 Version:     4.2
 # extraversion is used to define rhel internal version
-%define extraversion 16
+%define extraversion 19
 Release:     %{extraversion}%{?dist}
 Source:      http://www.kernel.org/pub/linux/utils/raid/mdadm/mdadm-%{version}%{?subversion:-%{subversion}}.tar.xz
 Source1:     mdmonitor.init
@@ -182,11 +182,16 @@ Patch164:    0165-Fix-assembling-RAID-volume-by-using-incremental.patch
 Patch165:    0166-Revert-mdadm-remove-container_enough-logic.patch
 Patch166:    0167-manage-adjust-checking-subarray-state-in-update_suba.patch
 Patch167:    0168-super1-remove-support-for-name-in-config.patch
+Patch168:    0169-Mdmonitor-Improve-udev-event-handling.patch
+Patch169:    0170-udev-Move-udev_block-and-udev_unblock-into-udev.c.patch
+Patch170:    0171-mdadm-enable-sync-file-for-udev-rules.patch
+Patch171:    0172-mdadm-Increase-number-limit-in-md-device-name-to-102.patch
 
 # RHEL customization patches
 Patch200:    mdadm-udev.patch
 Patch201:    mdadm-2.5.2-static.patch
 Patch202:    raid0-layout.patch
+Patch203:    mdadm-alloc-st-in-Assemble.patch
 
 URL:         http://www.kernel.org/pub/linux/utils/raid/mdadm/
 License:     GPLv2+
@@ -276,6 +281,18 @@ rm -rf %{buildroot}
 /usr/share/mdadm/mdcheck
 
 %changelog
+* Sat Oct 25 2025 Xiao Ni <xni@redhat.com> - 4.2-19
+- alloc superblock in Assemble
+- Resolves: RHEL-82267
+
+* Thu Jul 10 2025 John Pittman <jpittman@redhat.com> - 4.2-18
+- increase md device name number limit
+- Resolves: RHEL-97802
+
+* Thu Jun 5 2025 Xiao Ni <xni@redhat.com> - 4.2-17
+- enable sync file for udev rules
+- Resolves: RHEL-59180
+
 * Mon Oct 28 2024 Xiao Ni <xni@redhat.com> - 4.2-16
 - Remove name= support in config file
 - Resolves RHEL-45608
