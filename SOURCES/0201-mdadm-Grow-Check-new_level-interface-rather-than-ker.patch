@@ -1,0 +1,31 @@
+From b278b2fc172bb8d50f607adef4d515af1f52d913 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Fri, 18 Oct 2024 16:48:17 +0800
+Subject: [PATCH 201/201] mdadm/Grow: Check new_level interface rather than
+ kernel version
+
+Different os distributions have different kernel version themselves.
+Check new_level sysfs interface rather than kernel version.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Grow.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Grow.c b/Grow.c
+index ef1285ec..9032c3e9 100644
+--- a/Grow.c
++++ b/Grow.c
+@@ -2952,7 +2952,7 @@ static int impose_reshape(struct mdinfo *sra,
+ 			err = errno;
+ 
+ 		/* new_level is introduced in kernel 6.12 */
+-		if (!err && get_linux_version() >= 6012000 &&
++		if (!err && sysfs_attribute_available(sra, NULL, "new_level") &&
+ 				sysfs_set_num(sra, NULL, "new_level", info->new_level) < 0)
+ 			err = errno;
+ 
+-- 
+2.41.0
+

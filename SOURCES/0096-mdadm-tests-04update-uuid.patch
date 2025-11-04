@@ -1,0 +1,39 @@
+From 19cde79fda386329f69ead15ca6ae26527fab707 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Tue, 28 May 2024 21:51:48 +0800
+Subject: [PATCH 096/201] mdadm/tests: 04update-uuid
+
+Patch 50b100768a11('mdadm: deprecate bitmap custom file') needs to confirm when
+creating raid device with bitmap file.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ tests/04update-uuid | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/04update-uuid b/tests/04update-uuid
+index a4409e78..25314ab5 100644
+--- a/tests/04update-uuid
++++ b/tests/04update-uuid
+@@ -25,7 +25,7 @@ mdadm -S /dev/md0
+ 
+ # now if we have a bitmap, that needs updating too.
+ rm -f $targetdir/bitmap
+-mdadm -CR --assume-clean -b $targetdir/bitmap $md0 -l5 -n3 $dev0 $dev1 $dev2
++yes | mdadm -CR --assume-clean -b $targetdir/bitmap $md0 -l5 -n3 $dev0 $dev1 $dev2
+ mdadm -S /dev/md0
+ mdadm -A /dev/md0 -b $targetdir/bitmap --update=uuid --uuid=0123456789abcdef:fedcba9876543210 $dev0 $dev1 $dev2
+ no_errors
+@@ -41,7 +41,7 @@ mdadm -S /dev/md0
+ 
+ # and bitmap for version1
+ rm -f $targetdir/bitmap
+-mdadm -CR --assume-clean -e1.1 -b $targetdir/bitmap $md0 -l5 -n3 $dev0 $dev1 $dev2
++yes | mdadm -CR --assume-clean -e1.1 -b $targetdir/bitmap $md0 -l5 -n3 $dev0 $dev1 $dev2
+ mdadm -S /dev/md0
+ mdadm -A /dev/md0 -b $targetdir/bitmap --update=uuid --uuid=0123456789abcdef:fedcba9876543210 $dev0 $dev1 $dev2
+ no_errors
+-- 
+2.41.0
+

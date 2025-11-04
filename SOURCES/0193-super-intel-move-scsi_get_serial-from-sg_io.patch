@@ -1,0 +1,178 @@
+From bafa5ccfa56d776d431f766c765178eda0a4900d Mon Sep 17 00:00:00 2001
+From: Kinga Stefaniuk <kinga.stefaniuk@intel.com>
+Date: Fri, 4 Oct 2024 10:23:57 +0200
+Subject: [PATCH 193/201] super-intel: move scsi_get_serial from sg_io
+
+scsi_get_serial() function is used only by super-intel.c. Move function
+to this file and remove sg_io.c file.
+
+Signed-off-by: Kinga Stefaniuk <kinga.stefaniuk@intel.com>
+---
+ Makefile      |  4 ++--
+ sg_io.c       | 60 ---------------------------------------------------
+ super-intel.c | 47 ++++++++++++++++++++++++++++++++++++----
+ 3 files changed, 45 insertions(+), 66 deletions(-)
+ delete mode 100644 sg_io.c
+
+diff --git a/Makefile b/Makefile
+index 32f579de..24367b0f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -190,7 +190,7 @@ OBJS = mdadm.o config.o policy.o mdstat.o  ReadMe.o uuid.o util.o maps.o lib.o u
+        Incremental.o Dump.o \
+        mdopen.o super0.o super1.o super-ddf.o super-intel.o bitmap.o \
+        super-mbr.o super-gpt.o \
+-       restripe.o sysfs.o sha1.o mapfile.o crc32.o sg_io.o msg.o xmalloc.o \
++       restripe.o sysfs.o sha1.o mapfile.o crc32.o msg.o xmalloc.o \
+        platform-intel.o probe_roms.o crc32c.o drive_encryption.o
+ 
+ CHECK_OBJS = restripe.o uuid.o sysfs.o maps.o lib.o xmalloc.o dlink.o
+@@ -201,7 +201,7 @@ INCL = mdadm.h part.h bitmap.h
+ 
+ MON_OBJS = mdmon.o monitor.o managemon.o uuid.o util.o maps.o mdstat.o sysfs.o config.o mapfile.o mdopen.o\
+ 	policy.o lib.o udev.o \
+-	Kill.o sg_io.o dlink.o ReadMe.o super-intel.o \
++	Kill.o dlink.o ReadMe.o super-intel.o \
+ 	super-mbr.o super-gpt.o \
+ 	super-ddf.o sha1.o crc32.o msg.o bitmap.o xmalloc.o \
+ 	platform-intel.o probe_roms.o crc32c.o drive_encryption.o
+diff --git a/sg_io.c b/sg_io.c
+deleted file mode 100644
+index 7889a95e..00000000
+--- a/sg_io.c
++++ /dev/null
+@@ -1,60 +0,0 @@
+-/*
+- * Copyright (C) 2007-2008 Intel Corporation
+- *
+- *	Retrieve drive serial numbers for scsi disks
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+- * You should have received a copy of the GNU General Public License along with
+- * this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
+- */
+-#include <string.h>
+-#include <scsi/scsi.h>
+-#include <scsi/sg.h>
+-#include <sys/ioctl.h>
+-
+-int scsi_get_serial(int fd, void *buf, size_t buf_len)
+-{
+-	unsigned char rsp_buf[255];
+-	unsigned char inq_cmd[] = {INQUIRY, 1, 0x80, 0, sizeof(rsp_buf), 0};
+-	unsigned char sense[32];
+-	struct sg_io_hdr io_hdr;
+-	int rv;
+-	unsigned int rsp_len;
+-
+-	memset(&io_hdr, 0, sizeof(io_hdr));
+-	io_hdr.interface_id = 'S';
+-	io_hdr.cmdp = inq_cmd;
+-	io_hdr.cmd_len = sizeof(inq_cmd);
+-	io_hdr.dxferp = rsp_buf;
+-	io_hdr.dxfer_len = sizeof(rsp_buf);
+-	io_hdr.dxfer_direction = SG_DXFER_FROM_DEV;
+-	io_hdr.sbp = sense;
+-	io_hdr.mx_sb_len = sizeof(sense);
+-	io_hdr.timeout = 5000;
+-
+-	rv = ioctl(fd, SG_IO, &io_hdr);
+-
+-	if (rv)
+-		return rv;
+-
+-	if ((io_hdr.info & SG_INFO_OK_MASK) != SG_INFO_OK)
+-		return -1;
+-
+-	rsp_len = rsp_buf[3];
+-
+-	if (!rsp_len || buf_len < rsp_len)
+-		return -1;
+-
+-	memcpy(buf, &rsp_buf[4], rsp_len);
+-
+-	return 0;
+-}
+diff --git a/super-intel.c b/super-intel.c
+index 7c5119c5..3b856ad0 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -21,15 +21,18 @@
+ #include "mdadm.h"
+ #include "mdmon.h"
+ #include "dlink.h"
++#include "drive_encryption.h"
+ #include "sha1.h"
+ #include "platform-intel.h"
+ #include "xmalloc.h"
+ 
+-#include <values.h>
+-#include <scsi/sg.h>
+ #include <ctype.h>
+ #include <dirent.h>
+-#include "drive_encryption.h"
++#include <scsi/scsi.h>
++#include <scsi/sg.h>
++#include <string.h>
++#include <sys/ioctl.h>
++#include <values.h>
+ 
+ /* MPB == Metadata Parameter Block */
+ #define MPB_SIGNATURE "Intel Raid ISM Cfg Sig. "
+@@ -4131,7 +4134,43 @@ static int nvme_get_serial(int fd, void *buf, size_t buf_len)
+ 	return devpath_to_char(path, "serial", buf, buf_len, 0);
+ }
+ 
+-extern int scsi_get_serial(int fd, void *buf, size_t buf_len);
++mdadm_status_t scsi_get_serial(int fd, void *buf, size_t buf_len)
++{
++	struct sg_io_hdr io_hdr = {0};
++	unsigned char rsp_buf[255];
++	unsigned char inq_cmd[] = {INQUIRY, 1, 0x80, 0, sizeof(rsp_buf), 0};
++	unsigned char sense[32];
++	unsigned int rsp_len;
++	int rv;
++
++	io_hdr.interface_id = 'S';
++	io_hdr.cmdp = inq_cmd;
++	io_hdr.cmd_len = sizeof(inq_cmd);
++	io_hdr.dxferp = rsp_buf;
++	io_hdr.dxfer_len = sizeof(rsp_buf);
++	io_hdr.dxfer_direction = SG_DXFER_FROM_DEV;
++	io_hdr.sbp = sense;
++	io_hdr.mx_sb_len = sizeof(sense);
++	io_hdr.timeout = 5000;
++
++	rv = ioctl(fd, SG_IO, &io_hdr);
++
++	if (rv)
++		return MDADM_STATUS_ERROR;
++
++	if ((io_hdr.info & SG_INFO_OK_MASK) != SG_INFO_OK)
++		return MDADM_STATUS_ERROR;
++
++	rsp_len = rsp_buf[3];
++
++	if (!rsp_len || buf_len < rsp_len)
++		return MDADM_STATUS_ERROR;
++
++	memcpy(buf, &rsp_buf[4], rsp_len);
++
++	return MDADM_STATUS_SUCCESS;
++}
++
+ 
+ static int imsm_read_serial(int fd, char *devname,
+ 			    __u8 *serial, size_t serial_buf_len)
+-- 
+2.41.0
+

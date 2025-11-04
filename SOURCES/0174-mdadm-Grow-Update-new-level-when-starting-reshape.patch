@@ -1,0 +1,53 @@
+From 21212f6ad7c634f5f114f342ca84fe8c42a13f40 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 11 Sep 2024 16:54:23 +0800
+Subject: [PATCH 174/201] mdadm/Grow: Update new level when starting reshape
+
+Reshape needs to specify a backup file when it can't update data offset
+of member disks. For this situation, first, it starts reshape and then
+it kicks off mdadm-grow-continue service which does backup job and
+monitors the reshape process. The service is a new process, so it needs
+to read superblock from member disks to get information.
+
+But in the first step, it doesn't update new level in superblock. So
+it can't change level after reshape finishes, because the new level is
+not right. So records the new level in the first step.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Grow.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/Grow.c b/Grow.c
+index 5810b128..533f3014 100644
+--- a/Grow.c
++++ b/Grow.c
+@@ -2941,15 +2941,24 @@ static int impose_reshape(struct mdinfo *sra,
+ 		 * persists from some earlier problem.
+ 		 */
+ 		int err = 0;
++
+ 		if (sysfs_set_num(sra, NULL, "chunk_size", info->new_chunk) < 0)
+ 			err = errno;
++
+ 		if (!err && sysfs_set_num(sra, NULL, "layout",
+ 					  reshape->after.layout) < 0)
+ 			err = errno;
++
++		/* new_level is introduced in kernel 6.12 */
++		if (!err && get_linux_version() >= 6012000 &&
++				sysfs_set_num(sra, NULL, "new_level", info->new_level) < 0)
++			err = errno;
++
+ 		if (!err && subarray_set_num(container, sra, "raid_disks",
+ 					     reshape->after.data_disks +
+ 					     reshape->parity) < 0)
+ 			err = errno;
++
+ 		if (err) {
+ 			pr_err("Cannot set device shape for %s\n", devname);
+ 
+-- 
+2.41.0
+

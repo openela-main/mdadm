@@ -1,0 +1,28 @@
+From 1d0c61f4baa49bc218687017ccb2e3a664351390 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 22 May 2024 16:50:54 +0800
+Subject: [PATCH 091/201] mdadm/tests: 07autodetect.broken can be removed
+
+07autodetect can run successfully without error in kernel 6.9.0-rc5.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ tests/07autodetect.broken | 5 -----
+ 1 file changed, 5 deletions(-)
+ delete mode 100644 tests/07autodetect.broken
+
+diff --git a/tests/07autodetect.broken b/tests/07autodetect.broken
+deleted file mode 100644
+index 294954a1..00000000
+--- a/tests/07autodetect.broken
++++ /dev/null
+@@ -1,5 +0,0 @@
+-always fails
+-
+-Fails with error:
+-
+-    ERROR: no resync happening
+-- 
+2.41.0
+

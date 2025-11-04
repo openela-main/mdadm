@@ -1,0 +1,116 @@
+From da26064bfe4457d5037f3a1f1bb83a54225c6375 Mon Sep 17 00:00:00 2001
+From: Anna Sztukowska <anna.sztukowska@intel.com>
+Date: Thu, 8 Aug 2024 17:02:38 +0200
+Subject: [PATCH 169/201] Examine.c: Fix memory leaks in Examine()
+
+Fix memory leaks in Examine() reported by SAST analysis. Implement a
+method to traverse and free all the nodes of the doubly linked list.
+Replace for loop with while loop in order to improve redability of the
+code and free allocated memory correctly.
+
+Signed-off-by: Anna Sztukowska <anna.sztukowska@intel.com>
+---
+ Examine.c | 22 +++++++++++++++++-----
+ dlink.c   | 15 +++++++++++++++
+ dlink.h   |  1 +
+ 3 files changed, 33 insertions(+), 5 deletions(-)
+
+diff --git a/Examine.c b/Examine.c
+index c9605a60..fe162167 100644
+--- a/Examine.c
++++ b/Examine.c
+@@ -111,8 +111,10 @@ int Examine(struct mddev_dev *devlist,
+ 		close(fd);
+ 
+ 		if (err) {
+-			if (st)
++			if (st) {
+ 				st->ss->free_super(st);
++				free(st);
++			}
+ 			continue;
+ 		}
+ 
+@@ -152,19 +154,24 @@ int Examine(struct mddev_dev *devlist,
+ 			if (st->ss->export_examine_super)
+ 				st->ss->export_examine_super(st);
+ 			st->ss->free_super(st);
++			free(st);
+ 		} else {
+ 			printf("%s:\n",devlist->devname);
+ 			st->ss->examine_super(st, c->homehost);
+ 			st->ss->free_super(st);
++			free(st);
+ 		}
+ 	}
+ 	if (c->brief) {
+-		struct array *ap;
+-		for (ap = arrays; ap; ap = ap->next) {
++		struct array *ap = arrays, *next;
++
++		while (ap) {
+ 			char sep='=';
+ 			char *d;
+ 			int newline = 0;
+ 
++			next = ap->next;
++
+ 			ap->st->ss->brief_examine_super(ap->st, c->verbose > 0);
+ 			if (ap->spares && !ap->st->ss->external)
+ 				newline += printf("   spares=%d", ap->spares);
+@@ -182,10 +189,15 @@ int Examine(struct mddev_dev *devlist,
+ 					printf("\n");
+ 				ap->st->ss->brief_examine_subarrays(ap->st, c->verbose);
+ 			}
+-			ap->st->ss->free_super(ap->st);
+-			/* FIXME free ap */
+ 			if (ap->spares || c->verbose > 0)
+ 				printf("\n");
++
++			ap->st->ss->free_super(ap->st);
++			free(ap->st);
++			dl_free_all(ap->devs);
++			free(ap);
++
++			ap = next;
+ 		}
+ 	}
+ 	return rv;
+diff --git a/dlink.c b/dlink.c
+index 69aa7aa3..34633672 100644
+--- a/dlink.c
++++ b/dlink.c
+@@ -26,6 +26,21 @@ void dl_free(void *v)
+     free(vv-1);
+ }
+ 
++void dl_free_all(void *head)
++{
++	/* The list head is linked with the list tail so in order to free
++	 * all the elements properly there is a need to keep starting point.
++	 */
++	void *d = dl_next(head), *next;
++
++	while (d != head) {
++		next = dl_next(d);
++		dl_free(d);
++		d = next;
++	}
++	dl_free(head);
++}
++
+ void dl_init(void *v)
+ {
+     dl_next(v) = v;
+diff --git a/dlink.h b/dlink.h
+index ab2a9459..ce667839 100644
+--- a/dlink.h
++++ b/dlink.h
+@@ -23,3 +23,4 @@ void dl_add(void*, void*);
+ void dl_del(void*);
+ void dl_free(void*);
+ void dl_init(void*);
++void dl_free_all(void *head);
+-- 
+2.41.0
+

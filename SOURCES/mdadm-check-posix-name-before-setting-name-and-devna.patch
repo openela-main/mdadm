@@ -1,0 +1,88 @@
+From bcfe5a4220a0d49f703700033f7e5eaafdbf52ff Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 30 Apr 2025 08:51:49 -0400
+Subject: [PATCH 39/39] mdadm: check posix name before setting name and devname
+
+It's good to has limitations for name when creating an array. But the
+arrays which were created before patch e2eb503 (mdadm: Follow POSIX
+Portable Character Set) can't be assembled. So remove the POSIX check
+for assemble mode.
+
+This can be reproduced:
+* build mdadm without patch e2eb503
+* mdadm -CR /dev/md/node1:pv1 -l0 -n2 /dev/loop0 /dev/loop1
+* mdadm -Ss
+* build with latest mdadm, and try to assemble it.
+* mdadm -A /dev/md/node1:pv1 --name node1:pv1
+
+Fixes: e2eb503 (mdadm: Follow POSIX Portable Character Set)
+Signed-off-by: Xiao Ni <xni@redhat.com>
+---
+ config.c |  8 ++------
+ mdadm.c  | 12 ++++++++++++
+ 2 files changed, 14 insertions(+), 6 deletions(-)
+
+diff --git a/config.c b/config.c
+index 8a8ae5e4..8abdba44 100644
+--- a/config.c
++++ b/config.c
+@@ -208,11 +208,6 @@ static mdadm_status_t ident_check_name(const char *name, const char *prop_name,
+ 		return MDADM_STATUS_ERROR;
+ 	}
+ 
+-	if (!is_name_posix_compatible(name)) {
+-		ident_log(prop_name, name, "Not POSIX compatible", cmdline);
+-		return MDADM_STATUS_ERROR;
+-	}
+-
+ 	return MDADM_STATUS_SUCCESS;
+ }
+ 
+@@ -512,7 +507,8 @@ void arrayline(char *line)
+ 
+ 	for (w = dl_next(line); w != line; w = dl_next(w)) {
+ 		if (w[0] == '/' || strchr(w, '=') == NULL) {
+-			_ident_set_devname(&mis, w, false);
++			if (is_name_posix_compatible(basename(w)))
++				_ident_set_devname(&mis, w, false);
+ 		} else if (strncasecmp(w, "uuid=", 5) == 0) {
+ 			if (mis.uuid_set)
+ 				pr_err("only specify uuid once, %s ignored.\n",
+diff --git a/mdadm.c b/mdadm.c
+index 6200cd0e..2147b278 100644
+--- a/mdadm.c
++++ b/mdadm.c
+@@ -732,6 +732,11 @@ int main(int argc, char *argv[])
+ 				exit(2);
+ 			}
+ 
++			if (mode != ASSEMBLE &&
++					!is_name_posix_compatible(basename(optarg))) {
++				pr_err("%s Not POSIX compatible\n", basename(optarg));
++				exit(2);
++			}
+ 			if (ident_set_name(&ident, optarg) != MDADM_STATUS_SUCCESS)
+ 				exit(2);
+ 
+@@ -1284,11 +1289,18 @@ int main(int argc, char *argv[])
+ 	    mode == GROW || (mode == ASSEMBLE && ! c.scan)) {
+ 		struct stat stb;
+ 		int ret;
++		char *bname = basename(devlist->devname);
+ 
+ 		if (devs_found < 1) {
+ 			pr_err("an md device must be given in this mode\n");
+ 			exit(2);
+ 		}
++
++		if (mode != ASSEMBLE && !is_name_posix_compatible(bname)) {
++			pr_err("%s Not POSIX compatible\n", bname);
++			exit(2);
++		}
++
+ 		if (ident_set_devname(&ident, devlist->devname) != MDADM_STATUS_SUCCESS)
+ 			exit(1);
+ 
+-- 
+2.41.0
+

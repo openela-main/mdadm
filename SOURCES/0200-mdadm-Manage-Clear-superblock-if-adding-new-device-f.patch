@@ -1,0 +1,47 @@
+From c6ca5b31e18f92490e639de0e5eae88985628633 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Fri, 18 Oct 2024 16:48:16 +0800
+Subject: [PATCH 200/201] mdadm/Manage: Clear superblock if adding new device
+ fails
+
+The superblock is kept if adding new device fails. It should clear the
+superblock if it fails to add a new disk.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Manage.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/Manage.c b/Manage.c
+index 246ef319..8c58683b 100644
+--- a/Manage.c
++++ b/Manage.c
+@@ -793,6 +793,7 @@ int Manage_add(int fd, int tfd, struct mddev_dev *dv,
+ 	int j;
+ 	mdu_disk_info_t disc;
+ 	struct map_ent *map = NULL;
++	bool add_new_super = false;
+ 
+ 	if (!get_dev_size(tfd, dv->devname, &ldsize)) {
+ 		if (dv->disposition == 'M')
+@@ -1011,6 +1012,7 @@ int Manage_add(int fd, int tfd, struct mddev_dev *dv,
+ 			goto unlock;
+ 		if (tst->ss->write_init_super(tst))
+ 			goto unlock;
++		add_new_super = true;
+ 	} else if (dv->disposition == 'A') {
+ 		/*  this had better be raid1.
+ 		 * As we are "--re-add"ing we must find a spare slot
+@@ -1078,6 +1080,8 @@ int Manage_add(int fd, int tfd, struct mddev_dev *dv,
+ 	map_unlock(&map);
+ 	return 1;
+ unlock:
++	if (add_new_super)
++		Kill(dv->devname, tst, 0, -1, 0);
+ 	map_unlock(&map);
+ 	return -1;
+ }
+-- 
+2.41.0
+

@@ -1,0 +1,40 @@
+From 87f96c870399cd029933a9742ba72e85e3251c3e Mon Sep 17 00:00:00 2001
+From: Nigel Croxon <ncroxon@redhat.com>
+Date: Wed, 24 Jul 2024 09:20:28 -0400
+Subject: [PATCH 135/201] mdadm: msg.c fix coverity issues
+
+Fixing the following coding errors the coverity tools found:
+
+* Event check_return: Calling "fcntl(sfd, 4, fl)" without
+checking return value. This library function may fail and
+return an error code.
+
+Signed-off-by: Nigel Croxon <ncroxon@redhat.com>
+---
+ msg.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/msg.c b/msg.c
+index f0772b3f..b6da91d3 100644
+--- a/msg.c
++++ b/msg.c
+@@ -176,8 +176,15 @@ int connect_monitor(char *devname)
+ 	}
+ 
+ 	fl = fcntl(sfd, F_GETFL, 0);
++	if (fl < 0) {
++		close(sfd);
++		return -1;
++	}
+ 	fl |= O_NONBLOCK;
+-	fcntl(sfd, F_SETFL, fl);
++	if (fcntl(sfd, F_SETFL, fl) < 0) {
++		close(sfd);
++		return -1;
++	}
+ 
+ 	return sfd;
+ }
+-- 
+2.41.0
+

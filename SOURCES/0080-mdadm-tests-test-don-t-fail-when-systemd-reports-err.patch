@@ -1,0 +1,31 @@
+From 73ba062ef93d0a57360a2d5200bc7a8f8781e7b6 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 22 May 2024 16:50:42 +0800
+Subject: [PATCH 080/201] mdadm/tests: test don't fail when systemd reports
+ error
+
+Sometimes systemd reports error in dmesg and test fails. Add
+a condition to avoid this failure.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ test | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/test b/test
+index ff403293..3da53f87 100755
+--- a/test
++++ b/test
+@@ -109,7 +109,7 @@ do_test() {
+ 			if [ -f "${_script}.inject_error" ]; then
+ 				echo "dmesg checking is skipped because test inject error"
+ 			else
+-				dmesg | grep -iq "error\|call trace\|segfault" &&
++				dmesg | grep -iq "error\|call trace\|segfault" | grep -v "systemd" &&
+ 					die "dmesg prints errors when testing $_basename!"
+ 			fi
+ 			echo "succeeded"
+-- 
+2.41.0
+

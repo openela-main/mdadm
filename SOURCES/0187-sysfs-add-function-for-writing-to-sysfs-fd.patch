@@ -1,0 +1,315 @@
+From d95edceb362a6b647ec454c2a83add11c4ed4e64 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Tue, 24 Sep 2024 15:53:18 +0200
+Subject: [PATCH 187/201] sysfs: add function for writing to sysfs fd
+
+Proposed function sysfs_wrte_descriptor() unifies error handling for
+write() done to sysfs files. Main purpose is to use it with MD sysfs
+file but it can be used elsewhere.
+
+No functional changes.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Manage.c    | 45 +++++++++++++++++++++----------------
+ managemon.c | 13 +++--------
+ mdadm.h     |  3 +++
+ monitor.c   | 12 ++--------
+ sysfs.c     | 65 +++++++++++++++++++++++++++++++++++++++++++----------
+ util.c      | 19 +++++++++++-----
+ 6 files changed, 101 insertions(+), 56 deletions(-)
+
+diff --git a/Manage.c b/Manage.c
+index aba97df8..0f232a57 100644
+--- a/Manage.c
++++ b/Manage.c
+@@ -1439,7 +1439,7 @@ int Manage_subdevs(char *devname, int fd,
+ 
+ 	for (dv = devlist; dv; dv = dv->next) {
+ 		dev_t rdev = 0; /* device to add/remove etc */
+-		int rv;
++		int rv, err = 0;
+ 		int mj,mn;
+ 
+ 		raid_slot = -1;
+@@ -1670,9 +1670,8 @@ int Manage_subdevs(char *devname, int fd,
+ 				rv = Manage_remove(tst, fd, dv, sysfd,
+ 						   rdev, verbose, force,
+ 						   devname);
+-			if (sysfd >= 0)
+-				close_fd(&sysfd);
+-			sysfd = -1;
++			close_fd(&sysfd);
++
+ 			if (rv < 0)
+ 				goto abort;
+ 			if (rv > 0)
+@@ -1686,23 +1685,31 @@ int Manage_subdevs(char *devname, int fd,
+ 				close_fd(&sysfd);
+ 				goto abort;
+ 			}
+-		case 'I': /* incremental fail */
+-			if ((sysfd >= 0 && write(sysfd, "faulty", 6) != 6) ||
+-			    (sysfd < 0 && ioctl(fd, SET_DISK_FAULTY,
+-						rdev))) {
+-				if (errno == EBUSY)
+-					busy = 1;
+-				pr_err("set device faulty failed for %s:  %s\n",
+-					dv->devname, strerror(errno));
+-				close_fd(&sysfd);
+-				goto abort;
++		case 'I':
++			if (is_fd_valid(sysfd)) {
++				static const char val[] = "faulty";
++
++				rv = sysfs_write_descriptor(sysfd, val, strlen(val), &err);
++			} else {
++				rv = ioctl(fd, SET_DISK_FAULTY, rdev);
++				if (rv)
++					err = errno;
+ 			}
++
+ 			close_fd(&sysfd);
+-			count++;
+-			if (verbose >= 0)
+-				pr_err("set %s faulty in %s\n",
+-					dv->devname, devname);
+-			break;
++
++			if (rv == MDADM_STATUS_SUCCESS) {
++				count++;
++
++				pr_vrb("set %s faulty in %s\n", dv->devname, devname);
++				break;
++			}
++
++			if (err == EBUSY)
++				busy = 1;
++
++			pr_err("set device faulty failed for %s: %s\n", dv->devname, strerror(err));
++			goto abort;
+ 		case 'R': /* Mark as replaceable */
+ 			if (subarray) {
+ 				pr_err("Cannot replace disks in a \'member\' array, perform this operation on the parent container\n");
+diff --git a/managemon.c b/managemon.c
+index add6a79e..877e8605 100644
+--- a/managemon.c
++++ b/managemon.c
+@@ -512,16 +512,9 @@ static void manage_member(struct mdstat_ent *mdstat,
+ 	if (a->container == NULL)
+ 		return;
+ 
+-	if (sigterm && a->info.safe_mode_delay != 1 &&
+-	    a->safe_mode_delay_fd >= 0) {
+-		long int new_delay = 1;
+-		char delay[10];
+-		ssize_t len;
+-
+-		len = snprintf(delay, sizeof(delay), "0.%03ld\n", new_delay);
+-		if (write(a->safe_mode_delay_fd, delay, len) == len)
+-			a->info.safe_mode_delay = new_delay;
+-	}
++	if (sigterm && a->info.safe_mode_delay != 1 && a->safe_mode_delay_fd >= 0)
++		if (write_attr("0.001", a->safe_mode_delay_fd) == MDADM_STATUS_SUCCESS)
++			a->info.safe_mode_delay = 1;
+ 
+ 	/* We don't check the array while any update is pending, as it
+ 	 * might container a change (such as a spare assignment) which
+diff --git a/mdadm.h b/mdadm.h
+index d4f5702c..ce8155b5 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -803,6 +803,9 @@ enum sysfs_read_flags {
+ 
+ #define SYSFS_MAX_BUF_SIZE 64
+ 
++extern mdadm_status_t sysfs_write_descriptor(const int fd, const char *value,
++					     const ssize_t len, int *errno_p);
++extern mdadm_status_t write_attr(const char *value, const int fd);
+ extern void sysfs_get_container_devnm(struct mdinfo *mdi, char *buf);
+ 
+ /* If fd >= 0, get the array it is open on,
+diff --git a/monitor.c b/monitor.c
+index be0bec78..a4f707cc 100644
+--- a/monitor.c
++++ b/monitor.c
+@@ -35,11 +35,6 @@ enum bb_action {
+ 	COMPARE_BB,
+ };
+ 
+-static int write_attr(char *attr, int fd)
+-{
+-	return write(fd, attr, strlen(attr));
+-}
+-
+ static void add_fd(fd_set *fds, int *maxfd, int fd)
+ {
+ 	struct stat st;
+@@ -173,7 +168,7 @@ int process_ubb(struct active_array *a, struct mdinfo *mdi, const unsigned long
+ 	 * via sysfs file
+ 	 */
+ 	if ((ss->record_bad_block(a, mdi->disk.raid_disk, sector, length)) &&
+-	    (write(mdi->bb_fd, buf, buf_len) == buf_len))
++	    (sysfs_write_descriptor(mdi->bb_fd, buf, buf_len, NULL) == MDADM_STATUS_SUCCESS))
+ 		return 1;
+ 
+ 	/*
+@@ -622,14 +617,11 @@ static int read_and_act(struct active_array *a, fd_set *fds)
+ 		}
+ 
+ 		if ((mdi->next_state & DS_REMOVE) && mdi->state_fd >= 0) {
+-			int remove_result;
+-
+ 			/* The kernel may not be able to immediately remove the
+ 			 * disk.  In that case we wait a little while and
+ 			 * try again.
+ 			 */
+-			remove_result = write_attr("remove", mdi->state_fd);
+-			if (remove_result > 0) {
++			if (write_attr("remove", mdi->state_fd) == MDADM_STATUS_SUCCESS) {
+ 				dprintf_cont(" %d:removed", mdi->disk.raid_disk);
+ 				close(mdi->state_fd);
+ 				close(mdi->recovery_fd);
+diff --git a/sysfs.c b/sysfs.c
+index b3c8b10d..7a81cc5b 100644
+--- a/sysfs.c
++++ b/sysfs.c
+@@ -73,6 +73,47 @@ void sysfs_free(struct mdinfo *sra)
+ 		sra = sra2;
+ 	}
+ }
++/**
++ * write_attr() - write value to fd, don't check errno.
++ * @attr: value to write.
++ * @fd: file descriptor write to.
++ *
++ * Size to write is calculated by strlen().
++ */
++mdadm_status_t write_attr(const char *value, const int fd)
++{
++	return sysfs_write_descriptor(fd, value, strlen(value), NULL);
++}
++
++/**
++ * sysfs_write_descriptor()- wrapper for write(), projected to be used with sysfs.
++ * @fd: file descriptor.
++ * @value: value to set.
++ * @len: length of the value.
++ * @errno_p: On write() failure, buffer to copy errno value, might be NULL.
++ *
++ * Errors are differentiated, because (at least theoretically) kernel may not process whole string
++ * and it may or may not be a problem (it depends on implementation in kernel). Decision belongs to
++ * caller then.
++ * Generally, it should be safe to check if @errno_p changed to determine if error occurred.
++ */
++mdadm_status_t sysfs_write_descriptor(const int fd, const char *value, const ssize_t len,
++				      int *errno_p)
++{
++	ssize_t ret;
++
++	ret = write(fd, value, len);
++	if (ret == -1) {
++		if (errno_p)
++			*errno_p = errno;
++		return MDADM_STATUS_ERROR;
++	}
++
++	if (ret != len)
++		return MDADM_STATUS_UNDEF;
++
++	return MDADM_STATUS_SUCCESS;
++}
+ 
+ /**
+  * sysfs_get_container_devnm() - extract container device name.
+@@ -486,7 +527,6 @@ int sysfs_set_str(struct mdinfo *sra, struct mdinfo *dev,
+ 		  char *name, char *val)
+ {
+ 	char fname[MAX_SYSFS_PATH_LEN];
+-	unsigned int n;
+ 	int fd;
+ 
+ 	snprintf(fname, MAX_SYSFS_PATH_LEN, "/sys/block/%s/md/%s/%s",
+@@ -494,13 +534,14 @@ int sysfs_set_str(struct mdinfo *sra, struct mdinfo *dev,
+ 	fd = open(fname, O_WRONLY);
+ 	if (fd < 0)
+ 		return -1;
+-	n = write(fd, val, strlen(val));
+-	close(fd);
+-	if (n != strlen(val)) {
+-		dprintf("failed to write '%s' to '%s' (%s)\n",
+-			val, fname, strerror(errno));
++
++	if (write_attr(val, fd)) {
++		pr_err("failed to write '%s' to '%s' (%s)\n", val, fname, strerror(errno));
++		close(fd);
+ 		return -1;
+ 	}
++
++	close(fd);
+ 	return 0;
+ }
+ 
+@@ -523,7 +564,6 @@ int sysfs_set_num_signed(struct mdinfo *sra, struct mdinfo *dev,
+ int sysfs_uevent(struct mdinfo *sra, char *event)
+ {
+ 	char fname[MAX_SYSFS_PATH_LEN];
+-	int n;
+ 	int fd;
+ 
+ 	snprintf(fname, MAX_SYSFS_PATH_LEN, "/sys/block/%s/uevent",
+@@ -531,13 +571,14 @@ int sysfs_uevent(struct mdinfo *sra, char *event)
+ 	fd = open(fname, O_WRONLY);
+ 	if (fd < 0)
+ 		return -1;
+-	n = write(fd, event, strlen(event));
+-	close(fd);
+-	if (n != (int)strlen(event)) {
+-		dprintf("failed to write '%s' to '%s' (%s)\n",
+-			event, fname, strerror(errno));
++
++	if (write_attr(event, fd)) {
++		pr_err("failed to write '%s' to '%s' (%s)\n", event, fname, strerror(errno));
++		close(fd);
+ 		return -1;
+ 	}
++
++	close(fd);
+ 	return 0;
+ }
+ 
+diff --git a/util.c b/util.c
+index cc162278..2b660725 100644
+--- a/util.c
++++ b/util.c
+@@ -1854,13 +1854,22 @@ int hot_remove_disk(int mdfd, unsigned long dev, int force)
+ int sys_hot_remove_disk(int statefd, int force)
+ {
+ 	int cnt = force ? 500 : 5;
+-	int ret;
++	static const char val[] = "faulty";
++
++	while (cnt--) {
++		int err = 0;
++		int ret = sysfs_write_descriptor(statefd, val, strlen(val), &err);
++
++		if (ret == MDADM_STATUS_SUCCESS)
++			return 0;
++
++		if (err != EBUSY)
++			break;
+ 
+-	while ((ret = write(statefd, "remove", 6)) == -1 &&
+-	       errno == EBUSY &&
+-	       cnt-- > 0)
+ 		sleep_for(0, MSEC_TO_NSEC(10), true);
+-	return ret == 6 ? 0 : -1;
++	}
++
++	return -1;
+ }
+ 
+ int set_array_info(int mdfd, struct supertype *st, struct mdinfo *info)
+-- 
+2.41.0
+

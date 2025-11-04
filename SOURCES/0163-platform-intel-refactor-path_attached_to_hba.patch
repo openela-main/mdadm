@@ -1,0 +1,129 @@
+From a6392b419f38a0144a03df90371d6890540a55cf Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Tue, 7 May 2024 12:05:43 -0400
+Subject: [PATCH 163/201] platform-intel: refactor path_attached_to_hba()
+
+dprintf() call in path_attached_to_hba() is too noisy. Remove the call
+and refactor the function. Remove obsolete env variables check.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+---
+ platform-intel.c | 31 ++++++++++++++-----------------
+ platform-intel.h |  2 +-
+ super-intel.c    |  8 ++++----
+ 3 files changed, 19 insertions(+), 22 deletions(-)
+
+diff --git a/platform-intel.c b/platform-intel.c
+index d0ef9111..3a86f785 100644
+--- a/platform-intel.c
++++ b/platform-intel.c
+@@ -1331,31 +1331,28 @@ char *diskfd_to_devpath(int fd, int dev_level, char *buf)
+ 
+ 	return devt_to_devpath(st.st_rdev, dev_level, buf);
+ }
+-
+-int path_attached_to_hba(const char *disk_path, const char *hba_path)
++/**
++ * is_path_attached_to_hba() - Check if disk is attached to hba
++ *
++ * @disk_path: Path to disk.
++ * @hba_path: Path to hba.
++ *
++ * Returns: true if disk is attached to hba, false otherwise.
++ */
++bool is_path_attached_to_hba(const char *disk_path, const char *hba_path)
+ {
+-	int rc;
+-
+-	if (check_env("IMSM_TEST_AHCI_DEV") ||
+-	    check_env("IMSM_TEST_SCU_DEV")) {
+-		return 1;
+-	}
+-
+ 	if (!disk_path || !hba_path)
+-		return 0;
+-	dprintf("hba: %s - disk: %s\n", hba_path, disk_path);
++		return false;
+ 	if (strncmp(disk_path, hba_path, strlen(hba_path)) == 0)
+-		rc = 1;
+-	else
+-		rc = 0;
++		return true;
+ 
+-	return rc;
++	return false;
+ }
+ 
+ int devt_attached_to_hba(dev_t dev, const char *hba_path)
+ {
+ 	char *disk_path = devt_to_devpath(dev, 1, NULL);
+-	int rc = path_attached_to_hba(disk_path, hba_path);
++	int rc = is_path_attached_to_hba(disk_path, hba_path);
+ 
+ 	if (disk_path)
+ 		free(disk_path);
+@@ -1366,7 +1363,7 @@ int devt_attached_to_hba(dev_t dev, const char *hba_path)
+ int disk_attached_to_hba(int fd, const char *hba_path)
+ {
+ 	char *disk_path = diskfd_to_devpath(fd, 1, NULL);
+-	int rc = path_attached_to_hba(disk_path, hba_path);
++	int rc = is_path_attached_to_hba(disk_path, hba_path);
+ 
+ 	if (disk_path)
+ 		free(disk_path);
+diff --git a/platform-intel.h b/platform-intel.h
+index dcc5aaa7..344624d7 100644
+--- a/platform-intel.h
++++ b/platform-intel.h
+@@ -257,7 +257,7 @@ const struct imsm_orom *find_imsm_orom(void);
+ int disk_attached_to_hba(int fd, const char *hba_path);
+ int devt_attached_to_hba(dev_t dev, const char *hba_path);
+ char *devt_to_devpath(dev_t dev, int dev_level, char *buf);
+-int path_attached_to_hba(const char *disk_path, const char *hba_path);
++bool is_path_attached_to_hba(const char *disk_path, const char *hba_path);
+ const struct orom_entry *get_orom_entry_by_device_id(__u16 dev_id);
+ const struct imsm_orom *get_orom_by_device_id(__u16 device_id);
+ struct sys_dev *device_by_id(__u16 device_id);
+diff --git a/super-intel.c b/super-intel.c
+index 354c292a..75d7c060 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -800,7 +800,7 @@ static struct sys_dev* find_disk_attached_hba(int fd, const char *devname)
+ 		return 0;
+ 
+ 	for (elem = list; elem; elem = elem->next)
+-		if (path_attached_to_hba(disk_path, elem->path))
++		if (is_path_attached_to_hba(disk_path, elem->path))
+ 			break;
+ 
+ 	if (disk_path != devname)
+@@ -2412,7 +2412,7 @@ static int ahci_enumerate_ports(struct sys_dev *hba, unsigned long port_count, i
+ 		path = devt_to_devpath(makedev(major, minor), 1, NULL);
+ 		if (!path)
+ 			continue;
+-		if (!path_attached_to_hba(path, hba->path)) {
++		if (!is_path_attached_to_hba(path, hba->path)) {
+ 			free(path);
+ 			path = NULL;
+ 			continue;
+@@ -2563,7 +2563,7 @@ static int print_nvme_info(struct sys_dev *hba)
+ 		    !diskfd_to_devpath(fd, 1, cntrl_path))
+ 			goto skip;
+ 
+-		if (!path_attached_to_hba(cntrl_path, hba->path))
++		if (!is_path_attached_to_hba(cntrl_path, hba->path))
+ 			goto skip;
+ 
+ 		if (!imsm_is_nvme_namespace_supported(fd, 0))
+@@ -7077,7 +7077,7 @@ get_devices(const char *hba_path)
+ 		path = devt_to_devpath(makedev(major, minor), 1, NULL);
+ 		if (!path)
+ 			continue;
+-		if (!path_attached_to_hba(path, hba_path)) {
++		if (!is_path_attached_to_hba(path, hba_path)) {
+ 			free(path);
+ 			path = NULL;
+ 			continue;
+-- 
+2.41.0
+

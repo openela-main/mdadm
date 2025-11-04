@@ -1,7 +1,7 @@
 From 5be749ce416852e7acbb2415be380be358859612 Mon Sep 17 00:00:00 2001
 From: Kinga Stefaniuk <kinga.stefaniuk@intel.com>
 Date: Tue, 23 Jul 2024 15:38:41 +0200
-Subject: [PATCH 1/1] Detail: fix --detail --export for uuid_zero
+Subject: [PATCH 128/201] Detail: fix --detail --export for uuid_zero
 
 Mentioned commit (see Fixes) causes that devices with UUID
 equal to uuid_zero was not recognized properly. For few devices

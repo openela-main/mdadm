@@ -1,0 +1,39 @@
+From 166e5e2fc4b634df100ccc0010035f925bb2ad63 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 11 Sep 2024 16:54:26 +0800
+Subject: [PATCH 177/201] mdadm/Grow: sleep a while after removing disk in
+ impose_level
+
+It needs to remove disks when reshaping from raid456 to raid0. In
+kernel space it sets MD_RECOVERY_RUNNING. And it will fail to change
+level. So wait sometime to let md thread to clear this flag.
+
+This is found by test case 05r6tor0.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Grow.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/Grow.c b/Grow.c
+index ebb53a0d..60076f56 100644
+--- a/Grow.c
++++ b/Grow.c
+@@ -3034,6 +3034,13 @@ static int impose_level(int fd, int level, char *devname, int verbose)
+ 			      makedev(disk.major, disk.minor));
+ 			hot_remove_disk(fd, makedev(disk.major, disk.minor), 1);
+ 		}
++		/*
++		 * hot_remove_disk lets kernel set MD_RECOVERY_RUNNING
++		 * and it can't set level. It needs to wait sometime
++		 * to let md thread to clear the flag.
++		 */
++		pr_info("wait 5 seconds to give kernel space to finish job\n");
++		sleep_for(5, 0, true);
+ 	}
+ 	c = map_num(pers, level);
+ 	if (c) {
+-- 
+2.41.0
+

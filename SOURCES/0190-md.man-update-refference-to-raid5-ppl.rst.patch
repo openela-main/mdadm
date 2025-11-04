@@ -1,0 +1,43 @@
+From 4157e8da40ce976883c5b6e51e2352732e709b52 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Tue, 10 Sep 2024 14:17:58 +0200
+Subject: [PATCH 190/201] md.man: update refference to raid5-ppl.rst
+
+Documentation/md has moved to Documentation/driver-api/md.
+Update and and rework sentence.
+
+Remove refference to not supported kernel close to updated text.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ md.4 | 10 ++--------
+ 1 file changed, 2 insertions(+), 8 deletions(-)
+
+diff --git a/md.4 b/md.4
+index 7aef1577..9d5e55bf 100644
+--- a/md.4
++++ b/md.4
+@@ -937,18 +937,12 @@ Partial parity for a write operation is the XOR of stripe data chunks not
+ modified by the write. PPL is stored in the metadata region of RAID member drives,
+ no additional journal drive is needed.
+ After crashes, if one of the not modified data disks of
+-the stripe is missing, this updated parity can be used to recover its
+-data.
++the stripe is missing, this updated parity can be used to recover its data.
+ 
+-This mechanism is documented more fully in the file
+-Documentation/md/raid5-ppl.rst
++See Documentation/driver-api/md/raid5-ppl.rst for implementation details.
+ 
+ .SS WRITE-BEHIND
+ 
+-From Linux 2.6.14,
+-.I md
+-supports WRITE-BEHIND on RAID1 arrays.
+-
+ This allows certain devices in the array to be flagged as
+ .IR write-mostly .
+ MD will only read from such devices if there is no
+-- 
+2.41.0
+

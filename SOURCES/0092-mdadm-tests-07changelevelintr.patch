@@ -1,0 +1,73 @@
+From cd3b2350bef136b20c81190371fb0b60d62a0365 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Wed, 22 May 2024 16:50:55 +0800
+Subject: [PATCH 092/201] mdadm/tests: 07changelevelintr
+
+It needs to specify a 2 powered array size when updating array size.
+If not, it can't change chunksize.
+
+And sometimes it reports error reshape doesn't happen. In fact the
+reshape has finished. It doesn't need to wait before checking
+reshape action. Because check function waits itself.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ tests/07changelevelintr        | 9 +++++----
+ tests/07changelevelintr.broken | 9 ---------
+ 2 files changed, 5 insertions(+), 13 deletions(-)
+ delete mode 100644 tests/07changelevelintr.broken
+
+diff --git a/tests/07changelevelintr b/tests/07changelevelintr
+index 18c63092..d921f2b2 100644
+--- a/tests/07changelevelintr
++++ b/tests/07changelevelintr
+@@ -27,11 +27,9 @@ checkgeo() {
+ }
+ 
+ restart() {
+- sleep 0.5
+  check reshape
+  mdadm -S $md0
+  mdadm -A $md0 $devs --backup-file=$bu
+- sleep 0.5
+  check reshape
+ }
+ 
+@@ -49,13 +47,16 @@ mdadm -G $md0 --layout rs --backup-file=$bu
+ restart
+ checkgeo md0 raid5 5 $[128*1024] 3
+ 
+-mdadm -G $md0 --array-size 58368
++# It needs to shrink array size first. Choose a value that
++# is power of 2 for array size. If not, it can't change
++# chunk size.
++mdadm -G $md0 --array-size 51200
+ mdadm -G $md0 --raid-disks 4 -c 64 --backup-file=$bu
+ restart
+ checkgeo md0 raid5 4 $[64*1024] 3
+ 
+ devs="$dev0 $dev1 $dev2 $dev3"
+-mdadm -G $md0 --array-size 19456
++mdadm -G $md0 --array-size 18432
+ mdadm -G $md0 -n 2 -c 256 --backup-file=$bu
+ restart
+ checkgeo md0 raid5 2 $[256*1024] 3
+diff --git a/tests/07changelevelintr.broken b/tests/07changelevelintr.broken
+deleted file mode 100644
+index 284b4906..00000000
+--- a/tests/07changelevelintr.broken
++++ /dev/null
+@@ -1,9 +0,0 @@
+-always fails
+-
+-Fails with errors:
+-
+-  mdadm: this change will reduce the size of the array.
+-         use --grow --array-size first to truncate array.
+-         e.g. mdadm --grow /dev/md0 --array-size 56832
+-
+-  ERROR: no reshape happening
+-- 
+2.41.0
+

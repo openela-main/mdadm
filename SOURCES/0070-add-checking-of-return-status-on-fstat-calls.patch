@@ -1,0 +1,267 @@
+From 95673c7d83c8ac7f2aeb91a34ead2971ba30e96e Mon Sep 17 00:00:00 2001
+From: Nigel Croxon <ncroxon@redhat.com>
+Date: Mon, 20 May 2024 09:36:50 -0400
+Subject: [PATCH 070/201] add checking of return status on fstat calls
+
+There are a few places we don't check the return status when
+calling fstat for success. Clean up the calls by adding a
+check before continuing.
+
+Signed-off-by: Nigel Croxon <ncroxon@redhat.com>
+---
+ Assemble.c    | 41 +++++++++++++++++++++++------------------
+ Dump.c        | 11 +++++++++--
+ Grow.c        | 12 ++++++++----
+ config.c      |  3 ++-
+ mdstat.c      |  3 ++-
+ super-ddf.c   |  8 ++++++--
+ super-intel.c |  8 ++++++--
+ 7 files changed, 56 insertions(+), 30 deletions(-)
+
+diff --git a/Assemble.c b/Assemble.c
+index 83dced19..58dc2c5e 100644
+--- a/Assemble.c
++++ b/Assemble.c
+@@ -652,7 +652,9 @@ static int load_devices(struct devs *devices, char *devmap,
+ 			/* prepare useful information in info structures */
+ 			struct stat stb2;
+ 			int err;
+-			fstat(mdfd, &stb2);
++
++			if (fstat(mdfd, &stb2) != 0)
++				goto error;
+ 
+ 			if (c->update == UOPT_UUID && !ident->uuid_set)
+ 				random_uuid((__u8 *)ident->uuid);
+@@ -675,13 +677,10 @@ static int load_devices(struct devs *devices, char *devmap,
+ 				       devname);
+ 				if (dfd >= 0)
+ 					close(dfd);
+-				close(mdfd);
+-				free(devices);
+-				free(devmap);
+ 				tst->ss->free_super(tst);
+ 				free(tst);
+ 				*stp = st;
+-				return -1;
++				goto error;
+ 			}
+ 			tst->ss->getinfo_super(tst, content, devmap + devcnt * content->array.raid_disks);
+ 
+@@ -715,12 +714,9 @@ static int load_devices(struct devs *devices, char *devmap,
+ 					       map_num(update_options, c->update), tst->ss->name);
+ 				tst->ss->free_super(tst);
+ 				free(tst);
+-				close(mdfd);
+ 				close(dfd);
+-				free(devices);
+-				free(devmap);
+ 				*stp = st;
+-				return -1;
++				goto error;
+ 			}
+ 			if (c->update == UOPT_UUID &&
+ 			    !ident->uuid_set) {
+@@ -751,18 +747,23 @@ static int load_devices(struct devs *devices, char *devmap,
+ 				       devname);
+ 				if (dfd >= 0)
+ 					close(dfd);
+-				close(mdfd);
+-				free(devices);
+-				free(devmap);
+ 				tst->ss->free_super(tst);
+ 				free(tst);
+ 				*stp = st;
+-				return -1;
++				goto error;
+ 			}
+ 			tst->ss->getinfo_super(tst, content, devmap + devcnt * content->array.raid_disks);
+ 		}
+ 
+-		fstat(dfd, &stb);
++		if (fstat(dfd, &stb) != 0) {
++			close(dfd);
++			free(devices);
++			free(devmap);
++			tst->ss->free_super(tst);
++			free(tst);
++			*stp = st;
++			return -1;
++		}
+ 		close(dfd);
+ 
+ 		if (c->verbose > 0)
+@@ -842,12 +843,9 @@ static int load_devices(struct devs *devices, char *devmap,
+ 				       inargv ? "the list" :
+ 				       "the\n      DEVICE list in mdadm.conf"
+ 					);
+-				close(mdfd);
+-				free(devices);
+-				free(devmap);
+ 				free(best);
+ 				*stp = st;
+-				return -1;
++				goto error;
+ 			}
+ 			if (best[i] == -1 || (devices[best[i]].i.events
+ 					      < devices[devcnt].i.events))
+@@ -863,6 +861,13 @@ static int load_devices(struct devs *devices, char *devmap,
+ 	*bestp = best;
+ 	*stp = st;
+ 	return devcnt;
++
++error:
++	close(mdfd);
++	free(devices);
++	free(devmap);
++	return -1;
++
+ }
+ 
+ static int force_array(struct mdinfo *content,
+diff --git a/Dump.c b/Dump.c
+index 736bcb60..81b94940 100644
+--- a/Dump.c
++++ b/Dump.c
+@@ -37,6 +37,7 @@ int Dump_metadata(char *dev, char *dir, struct context *c,
+ 	unsigned long long size;
+ 	DIR *dirp;
+ 	struct dirent *de;
++	int ret = 0;
+ 
+ 	if (stat(dir, &stb) != 0 ||
+ 	    (S_IFMT & stb.st_mode) != S_IFDIR) {
+@@ -112,9 +113,15 @@ int Dump_metadata(char *dev, char *dir, struct context *c,
+ 	}
+ 	if (c->verbose >= 0)
+ 		printf("%s saved as %s.\n", dev, fname);
+-	fstat(fd, &dstb);
+-	close(fd);
++
+ 	close(fl);
++	ret = fstat(fd, &dstb);
++	close(fd);
++	if (ret) {
++		unlink(fname);
++		free(fname);
++		return 1;
++	}
+ 	if ((dstb.st_mode & S_IFMT) != S_IFBLK) {
+ 		/* Not a block device, so cannot create links */
+ 		free(fname);
+diff --git a/Grow.c b/Grow.c
+index 1923c27c..963792d0 100644
+--- a/Grow.c
++++ b/Grow.c
+@@ -1223,13 +1223,14 @@ int reshape_open_backup_file(char *backup_file,
+ 	 * way this will not notice, but it is better than
+ 	 * nothing.
+ 	 */
+-	fstat(*fdlist, &stb);
++	if (fstat(*fdlist, &stb) != 0)
++		goto error;
+ 	dev = stb.st_dev;
+-	fstat(fd, &stb);
++	if (fstat(fd, &stb) != 0)
++		goto error;
+ 	if (stb.st_rdev == dev) {
+ 		pr_err("backup file must NOT be on the array being reshaped.\n");
+-		close(*fdlist);
+-		return 0;
++		goto error;
+ 	}
+ 
+ 	memset(buf, 0, 512);
+@@ -1255,6 +1256,9 @@ int reshape_open_backup_file(char *backup_file,
+ 	}
+ 
+ 	return 1;
++error:
++	close(*fdlist);
++	return 0;
+ }
+ 
+ unsigned long compute_backup_blocks(int nchunk, int ochunk,
+diff --git a/config.c b/config.c
+index b46d71cb..612e700d 100644
+--- a/config.c
++++ b/config.c
+@@ -949,7 +949,8 @@ void conf_file_or_dir(FILE *f)
+ 	struct dirent *dp;
+ 	struct fname *list = NULL;
+ 
+-	fstat(fileno(f), &st);
++	if (fstat(fileno(f), &st) != 0)
++		return;
+ 	if (S_ISREG(st.st_mode))
+ 		conf_file(f);
+ 	else if (!S_ISDIR(st.st_mode))
+diff --git a/mdstat.c b/mdstat.c
+index 2fd792c5..e233f094 100644
+--- a/mdstat.c
++++ b/mdstat.c
+@@ -348,7 +348,8 @@ void mdstat_wait_fd(int fd, const sigset_t *sigmask)
+ 
+ 	if (fd >= 0) {
+ 		struct stat stb;
+-		fstat(fd, &stb);
++		if (fstat(fd, &stb) != 0)
++			return;
+ 		if ((stb.st_mode & S_IFMT) == S_IFREG)
+ 			/* Must be a /proc or /sys fd, so expect
+ 			 * POLLPRI
+diff --git a/super-ddf.c b/super-ddf.c
+index 21426c75..311001c1 100644
+--- a/super-ddf.c
++++ b/super-ddf.c
+@@ -1053,7 +1053,10 @@ static int load_ddf_local(int fd, struct ddf_super *super,
+ 		     0);
+ 	dl->devname = devname ? xstrdup(devname) : NULL;
+ 
+-	fstat(fd, &stb);
++	if (fstat(fd, &stb) != 0) {
++		free(dl);
++		return 1;
++	}
+ 	dl->major = major(stb.st_rdev);
+ 	dl->minor = minor(stb.st_rdev);
+ 	dl->next = super->dlist;
+@@ -2786,7 +2789,8 @@ static int add_to_super_ddf(struct supertype *st,
+ 	/* This is device numbered dk->number.  We need to create
+ 	 * a phys_disk entry and a more detailed disk_data entry.
+ 	 */
+-	fstat(fd, &stb);
++	if (fstat(fd, &stb) != 0)
++		return 1;
+ 	n = find_unused_pde(ddf);
+ 	if (n == DDF_NOTFOUND) {
+ 		pr_err("No free slot in array, cannot add disk\n");
+diff --git a/super-intel.c b/super-intel.c
+index 2b8b6fda..4d257371 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -4239,7 +4239,10 @@ load_imsm_disk(int fd, struct intel_super *super, char *devname, int keep_fd)
+ 
+ 	dl = xcalloc(1, sizeof(*dl));
+ 
+-	fstat(fd, &stb);
++	if (fstat(fd, &stb) != 0) {
++		free(dl);
++		return 1;
++	}
+ 	dl->major = major(stb.st_rdev);
+ 	dl->minor = minor(stb.st_rdev);
+ 	dl->next = super->disks;
+@@ -5981,7 +5984,8 @@ static int add_to_super_imsm(struct supertype *st, mdu_disk_info_t *dk,
+ 	if (super->current_vol >= 0)
+ 		return add_to_super_imsm_volume(st, dk, fd, devname);
+ 
+-	fstat(fd, &stb);
++	if (fstat(fd, &stb) != 0)
++		return 1;
+ 	dd = xcalloc(sizeof(*dd), 1);
+ 	dd->major = major(stb.st_rdev);
+ 	dd->minor = minor(stb.st_rdev);
+-- 
+2.41.0
+

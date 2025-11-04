@@ -1,0 +1,41 @@
+From ae2308ddf38b8f24a2b5e8e14e31153dfe608239 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Fri, 26 Jul 2024 15:14:16 +0800
+Subject: [PATCH 150/201] mdadm/super1: fix coverity issue RESOURCE_LEAK
+
+Fix resource leak problems in super1.c
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ super1.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/super1.c b/super1.c
+index 243eeb1a..9c9c7dd1 100644
+--- a/super1.c
++++ b/super1.c
+@@ -923,10 +923,12 @@ static int examine_badblocks_super1(struct supertype *st, int fd, char *devname)
+ 	offset <<= 9;
+ 	if (lseek64(fd, offset, 0) < 0) {
+ 		pr_err("Cannot seek to bad-blocks list\n");
++		free(bbl);
+ 		return 1;
+ 	}
+ 	if (read(fd, bbl, size) != size) {
+ 		pr_err("Cannot read bad-blocks list\n");
++		free(bbl);
+ 		return 1;
+ 	}
+ 	/* 64bits per entry. 10 bits is block-count, 54 bits is block
+@@ -947,6 +949,7 @@ static int examine_badblocks_super1(struct supertype *st, int fd, char *devname)
+ 
+ 		printf("%20llu for %d sectors\n", sector, count);
+ 	}
++	free(bbl);
+ 	return 0;
+ }
+ 
+-- 
+2.41.0
+
