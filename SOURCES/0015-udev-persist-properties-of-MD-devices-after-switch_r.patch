@@ -1,0 +1,40 @@
+From 21e4efb1cd15c4de4a57de26b0ea2e4234aa8ce5 Mon Sep 17 00:00:00 2001
+From: Antonio Alvarez Feijoo <antonio.feijoo@suse.com>
+Date: Thu, 23 Jan 2025 19:46:38 +0100
+Subject: [PATCH 15/37] udev: persist properties of MD devices after
+ switch_root
+
+dracut installs in the initrd a custom udev rule for MD devices
+(59-persistent-storage-md.rules) only to set the db_persist option (see
+[1]). The main purpose is that if an MD device is activated in the initrd,
+its properties are kept on the udev database after the transition from the
+initrd to the rootfs. This was added to fix detection issues when LVM is
+on top.
+
+This patch would allow to remove the custom udev rule shipped by dracut
+(63-md-raid-arrays.rules is already being installed in the initrd), and it
+will also benefit other initrd generators that do not want to create
+custom udev rules.
+
+[1] https://github.com/dracutdevs/dracut/blob/master/modules.d/90mdraid
+
+Signed-off-by: Antonio Alvarez Feijoo <antonio.feijoo@suse.com>
+---
+ udev-md-raid-arrays.rules | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/udev-md-raid-arrays.rules b/udev-md-raid-arrays.rules
+index d8de6d00..a8098dc5 100644
+--- a/udev-md-raid-arrays.rules
++++ b/udev-md-raid-arrays.rules
+@@ -29,6 +29,7 @@ ENV{DEVTYPE}=="partition", ENV{MD_DEVNAME}=="*[0-9]", SYMLINK+="md/$env{MD_DEVNA
+ IMPORT{builtin}="blkid"
+ OPTIONS+="link_priority=100"
+ OPTIONS+="watch"
++OPTIONS+="db_persist"
+ ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
+ ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_PART_ENTRY_UUID}=="?*", SYMLINK+="disk/by-partuuid/$env{ID_PART_ENTRY_UUID}"
+ ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk/by-label/$env{ID_FS_LABEL_ENC}"
+-- 
+2.41.0
+

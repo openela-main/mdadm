@@ -1,0 +1,122 @@
+From 7d29b3823c18a24d6efbb502f08638788f97e04b Mon Sep 17 00:00:00 2001
+From: Junxiao Bi <junxiao.bi@oracle.com>
+Date: Tue, 18 Feb 2025 10:48:31 -0800
+Subject: [PATCH 24/37] mdmon: imsm: fix metadata corruption when managing new
+ array
+
+When manager thread detects new array, it will invoke manage_new().
+For imsm array, it will further invoke imsm_open_new(). Since
+commit bbab0940fa75("imsm: write bad block log on metadata sync"),
+it preallocates bad block log when opening the array, that requires
+increasing the mpb buffer size.
+For that, imsm_open_new() invokes function imsm_update_metadata_locally(),
+which first uses imsm_prepare_update() to allocate a larger mpb buffer
+and store it at "mpb->next_buf", and then invoke imsm_process_update()
+to copy the content from current mpb buffer "mpb->buf" to "mpb->next_buf",
+and then free the current mpb buffer and set the new buffer as current.
+
+There is a small race window, when monitor thread is syncing metadata,
+it gets current buffer pointer in imsm_sync_metadata()->write_super_imsm(),
+but before flushing the buffer to disk, manager thread does above switching
+buffer which frees current buffer, then monitor thread will run into
+use-after-free issue and could cause on-disk metadata corruption.
+If system keeps running, further metadata update could fix the corruption,
+because after switching buffer, the new buffer will contain good metadata,
+but if panic/power cycle happens while disk metadata is corrupted,
+the system will run into bootup failure if array is used as root,
+otherwise the array can not be assembled after boot if not used as root.
+
+This issue will not happen for imsm array with only one member array,
+because the memory array has not be opened yet, monitor thread will not
+do any metadata updates.
+This can happen for imsm array with at lease two member array, in the
+following two scenarios:
+1. Restarting mdmon process with at least two member array
+This will happen during system boot up or user restart mdmon after mdadm
+upgrade
+2. Adding new member array to exist imsm array with at least one member
+array.
+
+To fix this, delay the switching buffer operation to monitor thread.
+
+Fixes: bbab0940fa75 ("imsm: write bad block log on metadata sync")
+Signed-off-by: Junxiao Bi <junxiao.bi@oracle.com>
+---
+ managemon.c   | 10 ++++++++--
+ super-intel.c | 14 +++++++++++---
+ 2 files changed, 19 insertions(+), 5 deletions(-)
+
+diff --git a/managemon.c b/managemon.c
+index d7981328..74b64bfc 100644
+--- a/managemon.c
++++ b/managemon.c
+@@ -721,11 +721,12 @@ static void manage_new(struct mdstat_ent *mdstat,
+ 	 * the monitor.
+ 	 */
+ 
++	struct metadata_update *update = NULL;
+ 	struct active_array *new = NULL;
+ 	struct mdinfo *mdi = NULL, *di;
+-	int i, inst;
+-	int failed = 0;
+ 	char buf[SYSFS_MAX_BUF_SIZE];
++	int failed = 0;
++	int i, inst;
+ 
+ 	/* check if array is ready to be monitored */
+ 	if (!mdstat->active || !mdstat->level)
+@@ -824,9 +825,14 @@ static void manage_new(struct mdstat_ent *mdstat,
+ 	/* if everything checks out tell the metadata handler we want to
+ 	 * manage this instance
+ 	 */
++	container->update_tail = &update;
+ 	if (!aa_ready(new) || container->ss->open_new(container, new, inst) < 0) {
++		container->update_tail = NULL;
+ 		goto error;
+ 	} else {
++		if (update)
++			queue_metadata_update(update);
++		container->update_tail = NULL;
+ 		replace_array(container, victim, new);
+ 		if (failed) {
+ 			new->check_degraded = 1;
+diff --git a/super-intel.c b/super-intel.c
+index cab84198..4988eef1 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -8467,12 +8467,15 @@ static int imsm_count_failed(struct intel_super *super, struct imsm_dev *dev,
+ 	return failed;
+ }
+ 
++static int imsm_prepare_update(struct supertype *st,
++			       struct metadata_update *update);
+ static int imsm_open_new(struct supertype *c, struct active_array *a,
+ 			 int inst)
+ {
+ 	struct intel_super *super = c->sb;
+ 	struct imsm_super *mpb = super->anchor;
+-	struct imsm_update_prealloc_bb_mem u;
++	struct imsm_update_prealloc_bb_mem *u;
++	struct metadata_update mu;
+ 
+ 	if (inst >= mpb->num_raid_devs) {
+ 		pr_err("subarry index %d, out of range\n", inst);
+@@ -8482,8 +8485,13 @@ static int imsm_open_new(struct supertype *c, struct active_array *a,
+ 	dprintf("imsm: open_new %d\n", inst);
+ 	a->info.container_member = inst;
+ 
+-	u.type = update_prealloc_badblocks_mem;
+-	imsm_update_metadata_locally(c, &u, sizeof(u));
++	u = xmalloc(sizeof(*u));
++	u->type = update_prealloc_badblocks_mem;
++	mu.len = sizeof(*u);
++	mu.buf = (char *)u;
++	imsm_prepare_update(c, &mu);
++	if (c->update_tail)
++		append_metadata_update(c, u, sizeof(*u));
+ 
+ 	return 0;
+ }
+-- 
+2.41.0
+

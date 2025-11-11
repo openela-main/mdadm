@@ -1,0 +1,26 @@
+From 07bde560b71a2f6e36de5bc6f24e07e761c1c83b Mon Sep 17 00:00:00 2001
+From: Paul Luse <paul.e.luse@intel.com>
+Date: Thu, 24 Apr 2025 08:38:29 -0700
+Subject: [PATCH 30/37] Update tests.yml
+
+Signed-off-by: Paul Luse <paul.e.luse@intel.com>
+---
+ .github/workflows/tests.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+index 6f8e2b8e..b4c156c0 100644
+--- a/.github/workflows/tests.yml
++++ b/.github/workflows/tests.yml
+@@ -65,7 +65,7 @@ jobs:
+        if: ${{ steps.testing.outcome == 'failure' }}
+        run: |
+           cd ..
+-          sudo rm /home/ci/actions-runner/_work/mdadm/logs/*.log
++          sudo rm -rf /home/ci/actions-runner/_work/mdadm/logs/*.log
+ 
+      - name: "Set failed"
+        if: ${{ steps.testing.outcome == 'failure' }}
+-- 
+2.41.0
+

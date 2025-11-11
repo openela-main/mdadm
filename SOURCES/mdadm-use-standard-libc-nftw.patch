@@ -1,0 +1,53 @@
+commit e549ac6ab2ce5e7ec182310f8f5f2e41c6ac9233
+Author: Xiao Ni <xni@redhat.com>
+Date:   Wed May 7 18:06:59 2025 +0800
+
+    mdadm: use standard libc nftw
+    
+    commit bd648e3bec3d ("mdadm: Remove klibc and uclibc support") removes
+    macro HAVE_NFTW/HAVE_FTW and uses libc header ftw.h. But it leaves the
+    codes in lib.c which let mdadm command call nftw defined in lib.c. It
+    needs to remove these codes.
+    
+    The bug can be reproduced by:
+    mdadm -CR /dev/md0 --level raid5 --metadata=1.1 --chunk=32 --raid-disks 3
+    --size 10000 /dev/loop1 /dev/loop2 /dev/loop3
+    mdadm /dev/md0 --grow --chunk=64
+    mdadm: /dev/md0: cannot open component -unknown-
+    
+    Fixes: bd648e3bec3d ("mdadm: Remove klibc and uclibc support")
+    Signed-off-by: Xiao Ni <xni@redhat.com>
+
+diff --git a/lib.c b/lib.c
+index f36ae03a..eb6cc119 100644
+--- a/lib.c
++++ b/lib.c
+@@ -245,28 +245,6 @@ int add_dev(const char *name, const struct stat *stb, int flag, struct FTW *s)
+ 	return 0;
+ }
+ 
+-#ifndef HAVE_NFTW
+-#ifdef HAVE_FTW
+-int add_dev_1(const char *name, const struct stat *stb, int flag)
+-{
+-	return add_dev(name, stb, flag, NULL);
+-}
+-int nftw(const char *path,
+-	 int (*han)(const char *name, const struct stat *stb,
+-		    int flag, struct FTW *s), int nopenfd, int flags)
+-{
+-	return ftw(path, add_dev_1, nopenfd);
+-}
+-#else
+-int nftw(const char *path,
+-	 int (*han)(const char *name, const struct stat *stb,
+-		    int flag, struct FTW *s), int nopenfd, int flags)
+-{
+-	return 0;
+-}
+-#endif /* HAVE_FTW */
+-#endif /* HAVE_NFTW */
+-
+ /*
+  * Find a block device with the right major/minor number.
+  * If we find multiple names, choose the shortest.

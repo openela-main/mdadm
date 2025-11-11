@@ -1,0 +1,217 @@
+From c2fbf66ba0243f499f78ed43fa1207a9bd9361b5 Mon Sep 17 00:00:00 2001
+From: XiaoNi87 <xni@redhat.com>
+Date: Tue, 18 Mar 2025 08:18:04 +0800
+Subject: [PATCH 25/37] Regression fix (#156)
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+---
+ .github/tools/run_mdadm_tests.sh   |  2 +-
+ test                               | 22 +++++++++++++++++++---
+ tests/05r6tor0.broken              | 15 +++++++++++++++
+ tests/07revert-inplace.broken      |  8 ++++++++
+ tests/10ddf-create.broken          |  5 -----
+ tests/10ddf-fail-two-spares.broken |  5 -----
+ tests/20raid5journal.broken        | 17 +++++++++++++++++
+ tests/env-ddf-template             |  3 +--
+ tests/skiptests                    |  9 +++++++++
+ util.c                             |  2 +-
+ 10 files changed, 71 insertions(+), 17 deletions(-)
+ create mode 100644 tests/05r6tor0.broken
+ create mode 100644 tests/07revert-inplace.broken
+ delete mode 100644 tests/10ddf-create.broken
+ delete mode 100644 tests/10ddf-fail-two-spares.broken
+ create mode 100644 tests/20raid5journal.broken
+ create mode 100644 tests/skiptests
+
+diff --git a/.github/tools/run_mdadm_tests.sh b/.github/tools/run_mdadm_tests.sh
+index 456874b5..22d89a8c 100755
+--- a/.github/tools/run_mdadm_tests.sh
++++ b/.github/tools/run_mdadm_tests.sh
+@@ -11,7 +11,7 @@ sudo ./test setup
+ 
+ #sudo ./test --tests=00createnames
+ 
+-sudo ./test --skip-broken --no-error --disable-integrity --disable-multipath --disable-linear --keep-going
++sudo ./test --skip-broken --no-error --disable-integrity --disable-multipath --disable-linear --keep-going --skip-bigcase
+ 
+ ret=$?
+ sudo ./test cleanup
+diff --git a/test b/test
+index 88e44f18..7fa68177 100755
+--- a/test
++++ b/test
+@@ -26,6 +26,10 @@ savelogs=0
+ exitonerror=1
+ ctrl_c_error=0
+ skipbroken=0
++skipbigcase=0
++skipfile="skiptests"
++skipcheckfile=$testdir/$skipfile
++checkscript=""
+ loop=1
+ prefix='[0-9][0-9]'
+ 
+@@ -192,6 +196,7 @@ do_help() {
+ 		--loop=N                    Run tests N times (0 to run forever)
+ 		--skip-broken               Skip tests that are known to be broken
+ 		--skip-always-broken        Skip tests that are known to always fail
++		--skip-bigcase              Skip tests that need time than 200 seconds
+ 		--dev=loop|lvm|ram|disk     Use loop devices (default), LVM, RAM or disk
+ 		--disks=                    Provide a bunch of physical devices for test
+ 		--volgroup=name             LVM volume group for LVM test
+@@ -295,6 +300,9 @@ parse_args() {
+ 		--skip-always-broken )
+ 			skipbroken=always
+ 			;;
++		--skip-bigcase )
++			skipbigcase=all
++			;;
+ 		--disable-multipath )
+ 			unset MULTIPATH
+ 			;;
+@@ -369,9 +377,17 @@ main() {
+ 		else
+ 			for script in $testdir/$prefix $testdir/$prefix*[^~]
+ 			do
+-				case $script in *.broken) ;;
+-				 *)
+-				     do_test $script
++				checkscript="${script##*/}"
++				case $script in
++				*.broken)
++					;;
++				*)
++					if grep -q "$checkscript" "$skipcheckfile"; then
++						if [ "$skipbigcase" == "all" ]; then
++							continue
++						fi
++					fi
++					do_test $script
+ 				esac
+ 			done
+ 		fi
+diff --git a/tests/05r6tor0.broken b/tests/05r6tor0.broken
+new file mode 100644
+index 00000000..930a0941
+--- /dev/null
++++ b/tests/05r6tor0.broken
+@@ -0,0 +1,15 @@
++Sometimes
++
+++++ pgrep -f 'mdadm --grow --continue'
++++ [[ '' != '' ]]
++++ break
++++ echo 100
++++ echo 500
++++ sleep 2
++++ check raid5
++++ case $1 in
++++ grep -sq 'active raid5 ' /proc/mdstat
++++ die 'active raid5 not found'
++++ echo -e '\n\tERROR: active raid5 not found \n'
++
++        ERROR: active raid5 not found
+diff --git a/tests/07revert-inplace.broken b/tests/07revert-inplace.broken
+new file mode 100644
+index 00000000..73d98a04
+--- /dev/null
++++ b/tests/07revert-inplace.broken
+@@ -0,0 +1,8 @@
++always fails
++
++Fails with errors:
++	++ /usr/sbin/mdadm -A /dev/md0 --update=revert-reshape /dev/loop0 /dev/loop1 /dev/loop2 /dev/loop3 /dev/loop4 --backup-file=/tmp/md-backup
++++ rv=1
++++ case $* in
++++ cat /var/tmp/stderr
++mdadm: failed to RUN_ARRAY /dev/md0: Invalid argument
+diff --git a/tests/10ddf-create.broken b/tests/10ddf-create.broken
+deleted file mode 100644
+index 0f7d25e5..00000000
+--- a/tests/10ddf-create.broken
++++ /dev/null
+@@ -1,5 +0,0 @@
+-Fails due to segmentation fault at assemble.
+-
+-Too much effort to diagnose this now, marking as broken to make CI clear.
+-	++ /usr/sbin/mdadm -A /dev/md/ddf0 /dev/loop8 /dev/loop9 /dev/loop10 /dev/loop11 /dev/loop12
+-	./test: line 76: 101955 Segmentation fault      (core dumped) $mdadm "$@" 2> $targetdir/stderr
+diff --git a/tests/10ddf-fail-two-spares.broken b/tests/10ddf-fail-two-spares.broken
+deleted file mode 100644
+index eeea56d9..00000000
+--- a/tests/10ddf-fail-two-spares.broken
++++ /dev/null
+@@ -1,5 +0,0 @@
+-fails infrequently
+-
+-Fails roughly 1 in 3 with error:
+-
+-   ERROR: /dev/md/vol1 should be optimal in meta data
+diff --git a/tests/20raid5journal.broken b/tests/20raid5journal.broken
+new file mode 100644
+index 00000000..c7b214af
+--- /dev/null
++++ b/tests/20raid5journal.broken
+@@ -0,0 +1,17 @@
++always fail
++
++++ /usr/sbin/mdadm -I /dev/loop4
++++ rv=0
++++ case $* in
++++ cat /var/tmp/stderr
++mdadm: /dev/loop4 attached to /dev/md/0_0, which has been started.
++++ return 0
++++ check raid5
++++ case $1 in
++++ grep -sq 'active raid5 ' /proc/mdstat
++++ die 'active raid5 not found'
++++ echo -e '\n\tERROR: active raid5 not found \n'
++
++        ERROR: active raid5 not found
++
++++ save_log fail
+diff --git a/tests/env-ddf-template b/tests/env-ddf-template
+index 4f4ad0f3..ebc0ebf3 100644
+--- a/tests/env-ddf-template
++++ b/tests/env-ddf-template
+@@ -3,8 +3,7 @@ sha1_sum() {
+ }
+ 
+ get_rootdev() {
+-    local part=$(grep ' / ' /proc/mounts | awk '{print $1}')
+-    local bd=/dev/$(lsblk -no PKNAME $part)
++    local bd=$(grep ' / ' /proc/mounts | awk '{print $1}')
+     [ -b $bd ] || exit 1
+     echo $bd
+ }
+diff --git a/tests/skiptests b/tests/skiptests
+new file mode 100644
+index 00000000..fd0893f1
+--- /dev/null
++++ b/tests/skiptests
+@@ -0,0 +1,9 @@
++casename:seconds
++01raid6integ:1732
++01replace:396
++07layouts:836
++11spare-migration:1140
++12imsm-r0_2d-grow-r0_5d:218
++13imsm-r0_r0_2d-grow-r0_r0_4d:218
++13imsm-r0_r0_2d-grow-r0_r0_5d:246
++19raid6check:268
+diff --git a/util.c b/util.c
+index 8c45f0e1..9fe2d227 100644
+--- a/util.c
++++ b/util.c
+@@ -2310,7 +2310,7 @@ mdadm_status_t continue_via_systemd(char *devnm, char *service_name, char *prefi
+ 	dprintf("Start %s service\n", service_name);
+ 	/* Simply return that service cannot be started */
+ 	if (check_env("MDADM_NO_SYSTEMCTL"))
+-		return MDADM_STATUS_SUCCESS;
++		return MDADM_STATUS_ERROR;
+ 
+ 	/* Fork in attempt to start services */
+ 	switch (fork()) {
+-- 
+2.41.0
+

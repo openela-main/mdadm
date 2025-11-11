@@ -1,0 +1,102 @@
+From dacce2a0009f3506a5accf91f8fa9956eb36218e Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mtkaczyk@kernel.org>
+Date: Wed, 12 Feb 2025 12:41:58 +0100
+Subject: [PATCH 23/37] Rework MAINTAINERS file
+
+Remove Mateusz. Intergrate it with README.md
+
+Signed-off-by: Mariusz Tkaczyk <mtkaczyk@kernel.org>
+---
+ MAINTAINERS    | 32 --------------------------------
+ MAINTAINERS.md | 23 +++++++++++++++++++++++
+ README.md      |  5 +----
+ 3 files changed, 24 insertions(+), 36 deletions(-)
+ delete mode 100644 MAINTAINERS
+ create mode 100644 MAINTAINERS.md
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+deleted file mode 100644
+index 0a1229fd..00000000
+--- a/MAINTAINERS
++++ /dev/null
+@@ -1,32 +0,0 @@
+-
+-# List of maintainers for mdadm
+-
+-
+-Descriptions of section entries:
+-
+-M:	Mail patches to: FullName <address@domain>
+-L:	Mailing list that is relevant to mdadm
+-
+-
+-Alphabetical Order:
+-
+-M:	Blazej Kucman <blazej.kucman@linux.intel.com>
+-L:	linux-raid@vger.kernel.org
+-
+-M:	Mateusz Kusiak <mateusz.kusiak@intel.com>
+-L:	linux-raid@vger.kernel.org
+-
+-M:	Mariusz Tkaczyk <mtkaczyk@kernel.org>
+-L:	linux-raid@vger.kernel.org
+-
+-M:	Nigel Croxon <ncroxon@redhat.com>
+-L:	linux-raid@vger.kernel.org
+-
+-M:	Song Liu <song@kernel.org>
+-L:	linux-raid@vger.kernel.org
+-
+-M:	Xiao Ni <xni@redhat.com>
+-L:	linux-raid@vger.kernel.org
+-
+-M:	Yu Kuai <yukuai@kernel.org>
+-L:	linux-raid@vger.kernel.org
+diff --git a/MAINTAINERS.md b/MAINTAINERS.md
+new file mode 100644
+index 00000000..00587484
+--- /dev/null
++++ b/MAINTAINERS.md
+@@ -0,0 +1,23 @@
++If you are sending patch through mailing list, please include everyone listed
++in this file.
++
++## Github maintainers team
++
++Github Pull Request must be `approved` by at least 2 maintainers team members:
++
++  Name | Github Profile | Email address |
++|  --  |----------------|---------------|
++| Blazej Kucman | [bkucman](https://github.com/bkucman) | <blazej.kucman@linux.intel.com> |
++| Mariusz Tkaczyk | [mtkaczyk](https://github.com/mtkaczyk) | <mtkaczyk@kernel.org> |
++| Nigel Croxon | [ncroxon](https://github.com/ncroxon) | <ncroxon@redhat.com> |
++| Xiao Ni | [XiaoNi87](https://github.com/XiaoNi87) | <xni@redhat.com> |
++
++## Kernel.org maintainers
++Reach this team specifically if you are observing differences
++between kernel.org and Github.
++
++| Name |  Email address |
++|------|----------------|
++| Mariusz Tkaczyk | <mtkaczyk@kernel.org> |
++| Song Liu | <song@kernel.org> |
++| Yu Kuai | <yukuai@kernel.org> |
+diff --git a/README.md b/README.md
+index 0c299a9a..029e0ee2 100644
+--- a/README.md
++++ b/README.md
+@@ -77,10 +77,7 @@ to the chosen branch, then Pull Request will be automatically updated.
+ 
+ # Maintainers of mdadm repository on kernel.org
+ 
+-If there are differences between github and kernel.org, please contact kernel.org mdadm maintainers:
+-
+-- Jes Sorensen <jes@trained-monkey.org>;
+-- Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>;
++See [Maintainers File](MAINTAINERS.md).
+ 
+ # Minimal supported kernel version
+ 
+-- 
+2.41.0
+

@@ -1,0 +1,55 @@
+From 7f57f9b79dada30cdc64de1d2fe7541093c5b4e3 Mon Sep 17 00:00:00 2001
+From: Nigel Croxon <ncroxon@redhat.com>
+Date: Thu, 9 Jan 2025 15:09:51 -0500
+Subject: [PATCH 06/37] mdadm: add MAINTAINERS file
+
+Create a maintainers file to keep track of people
+to contact when dealing with mdadm questions/issues.
+
+Signed-off-by: Nigel Croxon <ncroxon@redhat.com>
+---
+ MAINTAINERS | 32 ++++++++++++++++++++++++++++++++
+ 1 file changed, 32 insertions(+)
+ create mode 100644 MAINTAINERS
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+new file mode 100644
+index 00000000..0a1229fd
+--- /dev/null
++++ b/MAINTAINERS
+@@ -0,0 +1,32 @@
++
++# List of maintainers for mdadm
++
++
++Descriptions of section entries:
++
++M:	Mail patches to: FullName <address@domain>
++L:	Mailing list that is relevant to mdadm
++
++
++Alphabetical Order:
++
++M:	Blazej Kucman <blazej.kucman@linux.intel.com>
++L:	linux-raid@vger.kernel.org
++
++M:	Mateusz Kusiak <mateusz.kusiak@intel.com>
++L:	linux-raid@vger.kernel.org
++
++M:	Mariusz Tkaczyk <mtkaczyk@kernel.org>
++L:	linux-raid@vger.kernel.org
++
++M:	Nigel Croxon <ncroxon@redhat.com>
++L:	linux-raid@vger.kernel.org
++
++M:	Song Liu <song@kernel.org>
++L:	linux-raid@vger.kernel.org
++
++M:	Xiao Ni <xni@redhat.com>
++L:	linux-raid@vger.kernel.org
++
++M:	Yu Kuai <yukuai@kernel.org>
++L:	linux-raid@vger.kernel.org
+-- 
+2.41.0
+

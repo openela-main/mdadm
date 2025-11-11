@@ -1,0 +1,24 @@
+From 143d94f684b738d1aa89024b182ad4cfa1b9018b Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Tue, 12 Nov 2024 14:05:11 +0100
+Subject: [PATCH 05/37] checkpatch.conf: ignore NEW_TYPEDEFS
+
+In mdadm, we have more flexible apporach to typedefs.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ .github/tools/.checkpatch.conf | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/.github/tools/.checkpatch.conf b/.github/tools/.checkpatch.conf
+index d6e3bc44..03114847 100644
+--- a/.github/tools/.checkpatch.conf
++++ b/.github/tools/.checkpatch.conf
+@@ -8,3 +8,4 @@
+ --exclude tests
+ --ignore FILE_PATH_CHANGES
+ --ignore EMAIL_SUBJECT
++--ignore NEW_TYPEDEFS
+-- 
+2.41.0
+

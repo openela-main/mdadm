@@ -1,0 +1,61 @@
+From 9e8b3b1492cff63dafb759382c74a479460f49e6 Mon Sep 17 00:00:00 2001
+From: lilinzhe <llz@antiy.cn>
+Date: Mon, 16 Dec 2024 12:00:02 +0800
+Subject: [PATCH 18/37] super-ddf: Prevent crash when handling DDF metadata
+
+A dummy function is defined because availability of ss->update_super is
+not always verified.
+
+This fix addresses a crash reported when assembling a RAID array using
+mdadm with DDF metadata. For more details, see the discussion at:
+https://lore.kernel.org/all/
+CALHdMH30LuxR4tz9jP2ykDaDJtZ3P7L3LrZ+9e4Fq=Q6NwSM=Q@mail.gmail.com/
+
+The discussion centers on an issue with mdadm where attempting to
+assemble a RAID array caused a null pointer dereference. The problem
+was traced to a missing update_super() function in super-ddf.c, which
+led to a crash in Assemble.c.
+
+Signed-off-by: lilinzhe <llz@antiy.cn>
+---
+ super-ddf.c | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/super-ddf.c b/super-ddf.c
+index 6cd099ab..a06ed435 100644
+--- a/super-ddf.c
++++ b/super-ddf.c
+@@ -5195,6 +5195,21 @@ static void default_geometry_ddf(struct supertype *st, int *level, int *layout,
+ 		*layout = ddf_level_to_layout(*level);
+ }
+ 
++static int update_super_ddf_dummy(struct supertype *st, struct mdinfo *info,
++			 enum update_opt update,
++			 char *devname, int verbose,
++			 int uuid_set, char *homehost)
++{
++	/*
++	 * A dummy update_super function is required to ensure
++	 * reliable handling of DDF metadata in mdadm.
++	 * This implementation acts as a placeholder for cases
++	 * where ss->update_super is not verified.
++	 */
++	dprintf("update_super is not implemented in DDF\n");
++	return 0;
++}
++
+ struct superswitch super_ddf = {
+ 	.examine_super	= examine_super_ddf,
+ 	.brief_examine_super = brief_examine_super_ddf,
+@@ -5213,6 +5228,8 @@ struct superswitch super_ddf = {
+ 	.uuid_from_super= uuid_from_super_ddf,
+ 	.getinfo_super  = getinfo_super_ddf,
+ 
++	.update_super = update_super_ddf_dummy,
++
+ 	.avail_size	= avail_size_ddf,
+ 
+ 	.compare_super	= compare_super_ddf,
+-- 
+2.41.0
+

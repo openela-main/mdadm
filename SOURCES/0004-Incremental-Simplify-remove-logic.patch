@@ -1,0 +1,259 @@
+From b9888145987e273a7613209721a68f75e060263e Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+Date: Tue, 5 Nov 2024 13:07:16 +0100
+Subject: [PATCH 04/37] Incremental: Simplify remove logic
+
+Incremental_remove() does not execute Manage_subdevs() now.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@linux.intel.com>
+---
+ Incremental.c | 116 ++++++++++++++++++++++++++++++++------------------
+ Manage.c      |  10 ++---
+ mdadm.h       |   1 +
+ sysfs.c       |  23 ++++++++++
+ 4 files changed, 102 insertions(+), 48 deletions(-)
+
+diff --git a/Incremental.c b/Incremental.c
+index 60d6f8cb..228d2bdd 100644
+--- a/Incremental.c
++++ b/Incremental.c
+@@ -1610,22 +1610,6 @@ release:
+ 	return rv;
+ }
+ 
+-static void remove_from_member_array(struct mdstat_ent *memb,
+-				    struct mddev_dev *devlist, int verbose)
+-{
+-	int subfd = open_dev(memb->devnm);
+-
+-	if (subfd >= 0) {
+-		/*
+-		 * Ignore the return value because it's necessary
+-		 * to handle failure condition here.
+-		 */
+-		Manage_subdevs(memb->devnm, subfd, devlist, verbose,
+-			       0, UOPT_UNDEFINED, 0);
+-		close(subfd);
+-	}
+-}
+-
+ /**
+  * is_devnode_path() - check if the devname passed might be devnode path.
+  * @devnode: the path to check.
+@@ -1646,25 +1630,81 @@ static bool is_devnode_path(char *devnode)
+ 	return false;
+ }
+ 
++/**
++ * Incremental_remove_external() - Remove the device from external container.
++ * @device_devnm: block device to remove.
++ * @container_devnm: the parent container
++ * @mdstat: mdstat file content.
++ * @verbose: verbose flag.
++ *
++ * Fail member device in each subarray and remove member device from external container.
++ * The resposibility of removing member disks from external subararys belongs to mdmon.
++ */
++static mdadm_status_t Incremental_remove_external(char *device_devnm, char *container_devnm,
++						  struct mdstat_ent *mdstat, int verbose)
++{
++	mdadm_status_t rv = MDADM_STATUS_SUCCESS;
++	struct mdstat_ent *memb;
++
++	for (memb = mdstat ; memb ; memb = memb->next) {
++		mdadm_status_t ret = MDADM_STATUS_SUCCESS;
++		int state_fd;
++
++		if (!is_container_member(memb, container_devnm))
++			continue;
++
++		/*
++		 * Checking mdstat is pointles because it might be outdated, try open descriptor
++		 * instead. If it fails, we are fine with that, device is already gone.
++		 */
++		state_fd = sysfs_open_memb_attr(memb->devnm, device_devnm, "state", O_RDWR);
++		if (!is_fd_valid(state_fd))
++			continue;
++
++		ret = sysfs_set_memb_state_fd(state_fd, MEMB_STATE_FAULTY, NULL);
++		if (ret && verbose >= 0)
++			pr_err("Cannot fail member device %s in external subarray %s.\n",
++				device_devnm, memb->devnm);
++
++		close_fd(&state_fd);
++
++		/*
++		 * Don't remove member device from container if it failed to remove it
++		 * from any member array.
++		 */
++		rv |= ret;
++	}
++
++	if (rv == MDADM_STATUS_SUCCESS)
++		rv = sysfs_set_memb_state(container_devnm, device_devnm, MEMB_STATE_REMOVE);
++
++	if (rv && verbose >= 0)
++		pr_err("Cannot remove member device %s from container %s.\n", device_devnm,
++		       container_devnm);
++
++	return rv;
++}
++
+ /**
+  * Incremental_remove() - Remove the device from all raid arrays.
+  * @devname: the device we want to remove, it could be kernel device name or devnode.
+  * @id_path: optional, /dev/disk/by-path path to save for bare scenarios support.
+  * @verbose: verbose flag.
+  *
+- * First, fail the device (if needed) and then remove the device from native raid array or external
+- * container.  If it is external container, the device is removed from each subarray first.
++ * First, fail the device (if needed) and then remove the device. This code is critical for system
++ * funtionality and that is why it is keept as simple as possible. We do not load devices using
++ * sysfs_read() because any unerelated failure may lead us to abort. We also do not call
++ * Manage_Subdevs().
+  */
+ int Incremental_remove(char *devname, char *id_path, int verbose)
+ {
++	mdadm_status_t rv = MDADM_STATUS_SUCCESS;
+ 	char *devnm = basename(devname);
+-	struct mddev_dev devlist = {0};
+ 	char buf[SYSFS_MAX_BUF_SIZE];
+ 	struct mdstat_ent *mdstat;
+ 	struct mdstat_ent *ent;
+ 	struct mdinfo mdi;
+-	int rv = 1;
+-	int mdfd;
++	int mdfd = -1;
+ 
+ 	if (strcmp(devnm, devname) != 0)
+ 		if (!is_devnode_path(devname)) {
+@@ -1733,32 +1773,24 @@ int Incremental_remove(char *devname, char *id_path, int verbose)
+ 		map_free(map);
+ 	}
+ 
+-	devlist.devname = devnm;
+-	devlist.disposition = 'I';
+-	/* for a container, we must fail each member array */
+ 	if (is_mdstat_ent_external(ent)) {
+-		struct mdstat_ent *memb;
+-		for (memb = mdstat ; memb ; memb = memb->next) {
+-			if (is_container_member(memb, ent->devnm))
+-				remove_from_member_array(memb,
+-					&devlist, verbose);
+-		}
+-	} else {
+-		/*
+-		 * This 'I' incremental remove is a try-best effort,
+-		 * the failure condition can be safely ignored
+-		 * because of the following up 'r' remove.
+-		 */
+-		Manage_subdevs(ent->devnm, mdfd, &devlist,
+-			       verbose, 0, UOPT_UNDEFINED, 0);
++		rv = Incremental_remove_external(devnm, ent->devnm, mdstat, verbose);
++		goto out;
+ 	}
+ 
+-	devlist.disposition = 'r';
+-	rv = Manage_subdevs(ent->devnm, mdfd, &devlist,
+-			    verbose, 0, UOPT_UNDEFINED, 0);
++	/* Native arrays are handled separatelly to provide more detailed error handling */
++	rv = sysfs_set_memb_state(ent->devnm, devnm, MEMB_STATE_FAULTY);
++	if (rv && verbose >= 0)
++		pr_err("Cannot fail member device %s in array %s.\n", devnm, ent->devnm);
++
++	if (rv == MDADM_STATUS_SUCCESS)
++		rv = sysfs_set_memb_state(ent->devnm, devnm, MEMB_STATE_REMOVE);
++
++	if (rv && verbose >= 0)
++		pr_err("Cannot remove member device %s from %s.\n", devnm, ent->devnm);
+ 
+-	close_fd(&mdfd);
+ out:
++	close_fd(&mdfd);
+ 	free_mdstat(mdstat);
+ 	return rv;
+ }
+diff --git a/Manage.c b/Manage.c
+index d618a2f0..034eb00c 100644
+--- a/Manage.c
++++ b/Manage.c
+@@ -1381,8 +1381,6 @@ bool is_remove_safe(mdu_array_info_t *array, const int fd, char *devname, const
+  * 'f' - set the device faulty SET_DISK_FAULTY
+  *       device can be 'detached' in which case any device that
+  *       is inaccessible will be marked faulty.
+- * 'I' - remove device by using incremental fail
+- *       which is executed when device is removed surprisingly.
+  * 'R' - mark this device as wanting replacement.
+  * 'W' - this device is added if necessary and activated as
+  *       a replacement for a previous 'R' device.
+@@ -1544,9 +1542,9 @@ int Manage_subdevs(char *devname, int fd,
+ 
+ 			/* This is a kernel-internal name like 'sda1' */
+ 
+-			if (!strchr("rfI", dv->disposition)) {
+-				pr_err("%s only meaningful with -r, -f or -I, not -%c\n",
+-					dv->devname, dv->disposition);
++			if (!strchr("rf", dv->disposition)) {
++				pr_err("%s only meaningful with -r, -f, not -%c\n", dv->devname,
++				       dv->disposition);
+ 				goto abort;
+ 			}
+ 
+@@ -1673,7 +1671,7 @@ int Manage_subdevs(char *devname, int fd,
+ 				close_fd(&sysfd);
+ 				goto abort;
+ 			}
+-		case 'I':
++
+ 			if (is_fd_valid(sysfd)) {
+ 				rv = sysfs_set_memb_state_fd(sysfd, MEMB_STATE_FAULTY, &err);
+ 			} else {
+diff --git a/mdadm.h b/mdadm.h
+index 218056c8..77705b11 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -829,6 +829,7 @@ extern mdadm_status_t sysfs_write_descriptor(const int fd, const char *value,
+ 					     const ssize_t len, int *errno_p);
+ extern mdadm_status_t write_attr(const char *value, const int fd);
+ extern mdadm_status_t sysfs_set_memb_state_fd(int fd, memb_state_t state, int *err);
++extern mdadm_status_t sysfs_set_memb_state(char *array_devnm, char *memb_devnm, memb_state_t state);
+ extern void sysfs_get_container_devnm(struct mdinfo *mdi, char *buf);
+ 
+ extern int sysfs_open(char *devnm, char *devname, char *attr);
+diff --git a/sysfs.c b/sysfs.c
+index 60b27459..c030d634 100644
+--- a/sysfs.c
++++ b/sysfs.c
+@@ -149,6 +149,29 @@ mdadm_status_t sysfs_set_memb_state_fd(int fd, memb_state_t state, int *err)
+ 	return sysfs_write_descriptor(fd, val, strlen(val), err);
+ }
+ 
++/**
++ * sysfs_set_memb_state() - write to member disk state file.
++ * @array_devnm: kernel name of the array.
++ * @memb_devnm: kernel name of member device.
++ * @state: value to write.
++ *
++ * Function expects that the device exists, error is unconditionally printed.
++ */
++mdadm_status_t sysfs_set_memb_state(char *array_devnm, char *memb_devnm, memb_state_t state)
++{
++	int state_fd = sysfs_open_memb_attr(array_devnm, memb_devnm, "state", O_RDWR);
++
++	if (!is_fd_valid(state_fd)) {
++		pr_err("Cannot open file descriptor to %s in array %s, aborting.\n",
++		       memb_devnm, array_devnm);
++			return MDADM_STATUS_ERROR;
++	}
++
++	return sysfs_set_memb_state_fd(state_fd, state, NULL);
++
++	close_fd(&state_fd);
++}
++
+ /**
+  * sysfs_get_container_devnm() - extract container device name.
+  * @mdi: md_info describes member array, with GET_VERSION option.
+-- 
+2.41.0
+

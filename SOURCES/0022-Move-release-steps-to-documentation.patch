@@ -1,0 +1,20 @@
+From 4b3932487a8dc2e87530e595ccabe48c79446f30 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mtkaczyk@kernel.org>
+Date: Wed, 12 Feb 2025 11:29:05 +0100
+Subject: [PATCH 22/37] Move release steps to documentation/
+
+Make a room for release MAINTAINERS file.
+
+Signed-off-by: Mariusz Tkaczyk <mtkaczyk@kernel.org>
+---
+ MAINTAINERS.md => documentation/HOW_TO_RELEASE.md | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ rename MAINTAINERS.md => documentation/HOW_TO_RELEASE.md (100%)
+
+diff --git a/MAINTAINERS.md b/documentation/HOW_TO_RELEASE.md
+similarity index 100%
+rename from MAINTAINERS.md
+rename to documentation/HOW_TO_RELEASE.md
+-- 
+2.41.0
+

@@ -1,0 +1,193 @@
+From 6ce7f21bb822fd0125f78434d9fbf6c3db524892 Mon Sep 17 00:00:00 2001
+From: NeilBrown <neil@brown.name>
+Date: Fri, 4 Apr 2025 11:56:04 +1100
+Subject: [PATCH 28/37] Allow RAID0 to be created with v0.90 metadata #161
+
+It is not currently possible to create a RAID0 with 0.90 metadata.
+This is because 0.90 cannot specify the layout of RAID0 (it is
+traditionally ignored) and different kernels do different things with
+RAID0 layouts.
+
+However it should be possible to use --layout=dangerous as that
+acknowledges the risk.
+It also should be possible to create a RAID0 with all devices the same
+size because in that case all layouts are identical.
+
+The metadata handler can only check that all devices are the same size
+quite late - in write_init_super().  By that time the default is
+currently set - set to a value that super0 cannot handle.
+
+So this patch delays the setting of the default value and leave it for
+the metadata handler (or for the Build handler).
+
+super1 selects ORIG in that case.
+intel and ddf don't support non-uniform RAID0 so they don't need any
+change.
+super0 now checks the sizes of devices if the default RAID0 layout was
+requested and rejects the request in they are not the same.
+
+validiate_geometry0 now allows "dangerous" layouts for raid0.
+
+Signed-off-by: NeilBrown <neil@brown.name>
+---
+ Build.c       |  4 ++++
+ Create.c      |  2 +-
+ maps.c        |  2 +-
+ mdadm.h       |  1 +
+ super0.c      | 34 +++++++++++++++++++++++++++++++++-
+ super1.c      |  4 ++++
+ tests/00raid0 |  4 ++--
+ 7 files changed, 46 insertions(+), 5 deletions(-)
+
+diff --git a/Build.c b/Build.c
+index 70aab7a0..9eb85a13 100644
+--- a/Build.c
++++ b/Build.c
+@@ -103,6 +103,10 @@ int Build(struct mddev_ident *ident, struct mddev_dev *devlist, struct shape *s,
+ 		s->chunk = 64;
+ 	array.chunk_size = s->chunk*1024;
+ 	array.layout = s->layout;
++
++	if (array.level == 0 && array.layout == UnSet)
++		/* Raid0 leaves default to metadata handler.  That is us. */
++		array.layout = RAID0_ORIG_LAYOUT;
+ 	if (md_set_array_info(mdfd, &array)) {
+ 		pr_err("md_set_array_info() failed for %s: %s\n", chosen_name, strerror(errno));
+ 		goto abort;
+diff --git a/Create.c b/Create.c
+index fd6c9215..2b181dbf 100644
+--- a/Create.c
++++ b/Create.c
+@@ -77,7 +77,7 @@ int default_layout(struct supertype *st, int level, int verbose)
+ 		layout = 0;
+ 		break;
+ 	case 0:
+-		layout = RAID0_ORIG_LAYOUT;
++		/* Leave unset - metadata handlers choose default */
+ 		break;
+ 	case 10:
+ 		layout = 0x102; /* near=2, far=1 */
+diff --git a/maps.c b/maps.c
+index 17f8b54d..2181b4ac 100644
+--- a/maps.c
++++ b/maps.c
+@@ -81,7 +81,7 @@ mapping_t r0layout[] = {
+ 	{ "alternate", RAID0_ALT_MULTIZONE_LAYOUT},
+ 	{ "1", 1}, /* aka ORIG */
+ 	{ "2", 2}, /* aka ALT */
+-	{ "dangerous", 0},
++	{ "dangerous", RAID0_DANGEROUS_LAYOUT},
+ 	{ NULL, UnSet},
+ };
+ 
+diff --git a/mdadm.h b/mdadm.h
+index e84c341c..0ea83ad3 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -2003,6 +2003,7 @@ static inline int xasprintf(char **strp, const char *fmt, ...) {
+ #endif
+ 
+ enum r0layout {
++	RAID0_DANGEROUS_LAYOUT = 0, /* layout depends on kernel version */
+ 	RAID0_ORIG_LAYOUT = 1,
+ 	RAID0_ALT_MULTIZONE_LAYOUT = 2,
+ };
+diff --git a/super0.c b/super0.c
+index ff4905b9..4a462bdc 100644
+--- a/super0.c
++++ b/super0.c
+@@ -837,6 +837,7 @@ struct devinfo {
+ 	int fd;
+ 	char *devname;
+ 	mdu_disk_info_t disk;
++	unsigned long long dev_size;
+ 	struct devinfo *next;
+ };
+ 
+@@ -866,6 +867,10 @@ static int add_to_super0(struct supertype *st, mdu_disk_info_t *dinfo,
+ 	di->devname = devname;
+ 	di->disk = *dinfo;
+ 	di->next = NULL;
++
++	if (is_fd_valid(fd))
++		get_dev_size(fd, NULL, &di->dev_size);
++
+ 	*dip = di;
+ 
+ 	return 0;
+@@ -929,6 +934,33 @@ static int write_init_super0(struct supertype *st)
+ 	int rv = 0;
+ 	struct devinfo *di;
+ 
++	if (sb->level == 0 && sb->layout == UnSet) {
++		/* Without requesting a dangerous (0) layout
++		 * we can only allow this RAID0 if all devices are
++		 * the same size
++		 */
++		unsigned long long chunks = 0;
++		unsigned long chunk_sectors = sb->chunk_size >> 9;
++
++		for (di = st->info; di; di = di->next) {
++			unsigned long long this_chunks;
++
++			this_chunks = st->ss->avail_size(st, di->dev_size, 0) / chunk_sectors;
++
++			if (chunks == 0) {
++				chunks = this_chunks;
++				continue;
++			}
++
++			if (this_chunks != chunks) {
++				pr_err("Need explicit layout=dangerous to create 0.90 raid0 on non-uniform sized devices\n");
++				return 1;
++			}
++		}
++		/* looks safe */
++		sb->layout = 0;
++	}
++
+ 	for (di = st->info ; di && ! rv ; di = di->next) {
+ 
+ 		if (di->disk.state & (1 << MD_DISK_FAULTY))
+@@ -1321,7 +1353,7 @@ static int validate_geometry0(struct supertype *st, int level,
+ 	if (*chunk == UnSet)
+ 		*chunk = DEFAULT_CHUNK;
+ 
+-	if (level == 0 && layout != UnSet) {
++	if (level == 0 && layout != UnSet && layout != RAID0_DANGEROUS_LAYOUT) {
+ 		if (verbose)
+ 			pr_err("0.90 metadata does not support layouts for RAID0\n");
+ 		return 0;
+diff --git a/super1.c b/super1.c
+index c828b682..fb93f462 100644
+--- a/super1.c
++++ b/super1.c
+@@ -1677,6 +1677,10 @@ static int init_super1(struct supertype *st, mdu_array_info_t *info,
+ 		       sizeof(sb->set_name) - namelen);
+ 	}
+ 
++	if (info->level == 0 && info->layout == UnSet)
++		/* Metadata chooses default layout for RAID0 */
++		info->layout = RAID0_ORIG_LAYOUT;
++
+ 	sb->ctime = __cpu_to_le64((unsigned long long)time(0));
+ 	sb->level = __cpu_to_le32(info->level);
+ 	sb->layout = __cpu_to_le32(info->layout);
+diff --git a/tests/00raid0 b/tests/00raid0
+index 6407c320..94abcd49 100644
+--- a/tests/00raid0
++++ b/tests/00raid0
+@@ -6,8 +6,8 @@ check raid0
+ testdev $md0 3 $mdsize2_l 512
+ mdadm -S $md0
+ 
+-# verify raid0 with layouts fail for 0.90
+-mdadm -CR $md0 -e0.90 -l0 -n4 $dev0 $dev1 $dev2 $dev3
++# verify raid0 with explicit layouts fail for 0.90
++mdadm -CR $md0 -e0.90 -l0 --layout=original -n4 $dev0 $dev1 $dev2 $dev3
+ check opposite_result
+ 
+ # now with no superblock
+-- 
+2.41.0
+
