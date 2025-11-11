@@ -1,0 +1,26 @@
+From affe2168b807ccd48f00dc9e021196a5e2e83870 Mon Sep 17 00:00:00 2001
+From: Paul Luse <paul.e.luse@intel.com>
+Date: Thu, 24 Apr 2025 08:41:15 -0700
+Subject: [PATCH 31/39] Update tests.yml
+
+Signed-off-by: Paul Luse <paul.e.luse@intel.com>
+---
+ .github/workflows/tests.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+index b4c156c0..9b361571 100644
+--- a/.github/workflows/tests.yml
++++ b/.github/workflows/tests.yml
+@@ -37,7 +37,7 @@ jobs:
+           vagrant status
+           vagrant up
+           sleep 2
+-          vagrant ssh -c "sudo timedatectl set-timezone UTC && \
++          vagrant ssh -c "uname -r && sudo timedatectl set-timezone UTC && \
+             sudo systemctl restart chronyd && sudo chronyc -a makestep && sleep 1"
+           echo "FYI vagrant time command finished with exit code: $?" 
+ 
+-- 
+2.41.0
+

@@ -1,13 +1,13 @@
 Name:        mdadm
-Version:     4.3
+Version:     4.4
 # extraversion is used to define rhel internal version
-%define extraversion 5
+%define extraversion 2
 Release:     %{extraversion}%{?dist}
 Summary:     The mdadm program controls Linux md devices (software RAID arrays)
-URL:         http://www.kernel.org/pub/linux/utils/raid/mdadm/
+URL:         https://git.kernel.org/pub/scm/utils/mdadm/mdadm.git
 License:     GPLv2+
 
-Source:      http://www.kernel.org/pub/linux/utils/raid/mdadm/mdadm-%{version}%{?subversion:-%{subversion}}.tar.xz
+Source:      https://git.kernel.org/pub/scm/utils/mdadm/mdadm.git/snapshot/%{name}-%{version}%{?subversion:-%{subversion}}.tar.gz
 Source1:     raid-check
 Source2:     mdadm-raid-check-sysconfig
 Source3:     mdmonitor.service
@@ -19,206 +19,50 @@ Source8:     mdcheck
 Source9:     md-auto-readd.rule
 Source10:    md-auto-readd.sh
 
-Patch000:    0001-Remove-hardcoded-checkpoint-interval-checking.patch
-Patch001:    0002-monitor-refactor-checkpoint-update.patch
-Patch002:    0003-Super-intel-Fix-first-checkpoint-restart.patch
-Patch003:    0004-Grow-Move-update_tail-assign-to-Grow_reshape.patch
-Patch004:    0005-Add-understanding-output-section-in-man.patch
-Patch005:    0006-Create-add_disk_to_super-fix-resource-leak.patch
-Patch006:    0007-mdadm-signal_s-init-variables.patch
-Patch007:    0008-Monitor-open-file-before-check-in-check_one_sharer.patch
-Patch008:    0009-Grow-remove-dead-condition-in-Grow_reshape.patch
-Patch009:    0010-super1-check-fd-before-passing-to-get_dev_size-in-ad.patch
-Patch010:    0011-mdmon-refactor-md-device-name-check-in-main.patch
-Patch011:    0012-test-run-tests-on-system-level-mdadm.patch
-Patch012:    0013-Monitor-Allow-no-PID-in-check_one_sharer.patch
-Patch013:    0014-super-intel-respect-IMSM_DEVNAME_AS_SERIAL-flag.patch
-Patch014:    0015-mdadm-remove-TODO.patch
-Patch015:    0016-mdadm-remove-makedist.patch
-Patch016:    0017-mdadm-remove-mdadm.spec.patch
-Patch017:    0018-mdadm-remove-mkinitramfs-stuff.patch
-Patch018:    0019-mdadm-move-documentation-to-folder.patch
-Patch019:    0020-Detail-remove-duplicated-code.patch
-Patch020:    0021-mdadm-Add-functions-for-spare-criteria-verification.patch
-Patch021:    0022-mdadm-drop-get_required_spare_criteria.patch
-Patch022:    0023-Manage-fix-check-after-dereference-issue.patch
-Patch023:    0024-Manage-implement-manage_add_external.patch
-Patch024:    0025-mdadm-introduce-sysfs_get_container_devnm.patch
-Patch025:    0026-mdadm.h-Introduce-custom-device-policies.patch
-Patch026:    0027-mdadm-test_and_add-device-policies-implementation.patch
-Patch027:    0028-Create-Use-device-policies.patch
-Patch028:    0029-Manage-check-device-policies-in-manage_add_external.patch
-Patch029:    0030-Monitor-Incremental-use-device-policies.patch
-Patch030:    0031-imsm-test_and_add_device_policies-implementation.patch
-Patch031:    0032-mdadm-drop-get_disk_controller_domain.patch
-Patch032:    0033-Revert-policy.c-Avoid-to-take-spare-without-defined-.patch
-Patch033:    0034-mdadm-remove-inventory-file.patch
-Patch034:    0035-udev.c-Do-not-require-libudev.h-if-DNO_LIBUDEV.patch
-Patch035:    0036-util.c-add-limits.h-include-for-NAME_MAX-definition.patch
-Patch036:    0037-mdadm-set-swapuuid-in-all-handlers.patch
-Patch037:    0038-mdadm-Fix-native-detail-export.patch
-Patch038:    0039-sysfs-remove-vers-parameter-from-sysfs_set_array.patch
-Patch039:    0040-mdadm-fix-grow-segfault-for-IMSM.patch
-Patch040:    0041-Remove-all-if-zeros-pt.2.patch
-Patch041:    0042-mdadm-Move-pr_vrb-define-to-mdadm.h.patch
-Patch042:    0043-Add-reading-Opal-NVMe-encryption-information.patch
-Patch043:    0044-Add-reading-SATA-encryption-information.patch
-Patch044:    0045-Add-key-ENCRYPTION_NO_VERIFY-to-conf.patch
-Patch045:    0046-imsm-print-disk-encryption-information.patch
-Patch046:    0047-imsm-drive-encryption-policy-implementation.patch
-Patch047:    0048-mdadm-add-CHANGELOG.md.patch
-Patch048:    0049-mdadm-Add-MAINTAINERS.md.patch
-Patch049:    0050-mdadm-Add-README.md.patch
-Patch050:    0051-Create.c-fix-uclibc-build.patch
-Patch051:    0052-mdadm-pass-struct-context-for-external-reshapes.patch
-Patch052:    0053-mdadm-use-struct-context-in-reshape_super.patch
-Patch053:    0054-imsm-add-support-for-literal-RAID-10.patch
-Patch054:    0055-imsm-refactor-RAID-level-handling.patch
-Patch055:    0056-imsm-bump-minimal-version.patch
-Patch056:    0057-imsm-define-RAID_10-attribute.patch
-Patch057:    0058-imsm-simplify-imsm_check_attributes.patch
-Patch058:    0059-imsm-support-RAID-10-with-more-than-4-drives.patch
-Patch059:    0060-tests-01r5fail-enhance.patch
-Patch060:    0061-tests-01r5integ.broken.patch
-Patch061:    0062-tests-01raid6integ.broken-can-be-removed.patch
-Patch062:    0063-Makefile-Move-pie-to-LDFLAGS.patch
-Patch063:    0064-tests-23rdev-lifetime-fix-a-typo.patch
-Patch064:    0065-util.c-change-devnm-to-const-in-mdmon-functions.patch
-Patch065:    0066-Wait-for-mdmon-when-it-is-stared-via-systemd.patch
-Patch066:    0067-mdadm-Change-main-repository-to-Github.patch
-Patch067:    0069-mdadm-Fix-compilation-for-32-bit-arch.patch
-Patch068:    0070-add-checking-of-return-status-on-fstat-calls.patch
-Patch069:    0071-super-intel-fix-typo-in-error-msg.patch
-Patch070:    0072-mdadm-super-intel-remove-dead-code.patch
-Patch071:    0073-mdadm-super-intel-fix-bad-shift.patch
-Patch072:    0074-mdadm-deprecate-bitmap-custom-file.patch
-Patch073:    0075-Makefile-fix-make-s-detection.patch
-Patch074:    0076-Change-some-error-messages-to-info-level.patch
-Patch075:    0077-mdadm-Start-update_opt-from-0.patch
-Patch076:    0078-Don-t-control-reshape-speed-in-daemon.patch
-Patch077:    0079-mdadm-tests-test-enhance.patch
-Patch078:    0080-mdadm-tests-test-don-t-fail-when-systemd-reports-err.patch
-Patch079:    0081-mdadm-tests-names_template-enhance.patch
-Patch080:    0082-mdadm-tests-03assem-incr-enhance.patch
-Patch081:    0083-mdadm-tests-03r0assem-enhance.patch
-Patch082:    0084-mdadm-tests-remove-03r5assem-failed.patch
-Patch083:    0085-mdadm-tests-03r5assemV1.patch
-Patch084:    0086-mdadm-tests-remove-04r5swap.broken.patch
-Patch085:    0087-tests-04update-metadata-skip-linear.patch
-Patch086:    0088-mdadm-tests-05r5-internalbitmap.patch
-Patch087:    0089-mdadm-tests-06name-enhance.patch
-Patch088:    0090-mdadm-tests-07autoassemble.patch
-Patch089:    0091-mdadm-tests-07autodetect.broken-can-be-removed.patch
-Patch090:    0092-mdadm-tests-07changelevelintr.patch
-Patch091:    0093-mdadm-tests-disable-selinux.patch
-Patch092:    0094-mdadm-platform-intel-buffer-overflow-detected.patch
-Patch093:    0095-mdadm-tests-bitmap-cases-enhance.patch
-Patch094:    0096-mdadm-tests-04update-uuid.patch
-Patch095:    0097-mdadm-tests-05r1-re-add-nosuper.patch
-Patch096:    0098-mdadm-tests-remove-strace-test.patch
-Patch097:    0099-mdadm.h-provide-basename-if-GLIBC-is-not-avialable.patch
-Patch098:    0100-imsm-fix-first-volume-autolayout-with-IMSM_NO_PLATFO.patch
-Patch099:    0101-imsm-make-freesize-required-to-volume-autolayout.patch
-Patch100:    0102-mdadm-Fix-hang-race-condition-in-wait_for_zero_forks.patch
-Patch101:    0103-mdadm-Block-SIGCHLD-processes-before-starting-childr.patch
-Patch102:    0104-test-pass-flags-to-services.patch
-Patch103:    0105-mdadm-Fix-socket-connection-failure-when-mdmon-runs-.patch
-Patch104:    0106-Makefile-Do-not-call-gcc-directly.patch
-Patch105:    0107-mdadm-tests-judge-foreign-array-in-test-cases.patch
-Patch106:    0108-Revert-mdadm-Fix-socket-connection-failure-when-mdmo.patch
-Patch107:    0109-mdadm-Assemble.c-fix-coverity-issues.patch
-Patch108:    0111-mdadm-Fix-socket-connection-failure-when-mdmon-runs-.patch
-Patch109:    0113-config.c-Fix-memory-leak-in-load_containers.patch
-Patch110:    0114-mdadm-Build.c-fix-coverity-issues.patch
-Patch111:    0115-mdadm-Create.c-fix-coverity-issues.patch
-Patch112:    0116-mdadm-super-ddf.c-fix-coverity-issues.patch
-Patch113:    0117-mdadm-clustermd_tests-add-some-APIs-in-func.sh-to-su.patch
-Patch114:    0118-mdadm-clustermd_tests-adjust-test-cases-to-support-m.patch
-Patch115:    0119-mapfile.c-Fix-STRING_OVERFLOW-issue.patch
-Patch116:    0120-mdadm-Manage.c-fix-coverity-issues.patch
-Patch117:    0121-Manage-fix-is_remove_safe.patch
-Patch118:    0122-imsm-add-indent-for-encryption-details.patch
-Patch119:    0123-mdadm-Monitor.c-fix-coverity-issues.patch
-Patch120:    0124-mdadm-Query.c-fix-coverity-issues.patch
-Patch121:    0125-mdadm-lib.c-fix-coverity-issues.patch
-Patch122:    0126-mdadm-do-not-allow-leading-dot-in-MD-device-name.patch
-Patch123:    0128-Detail-fix-detail-export-for-uuid_zero.patch
-Patch124:    0129-drive_encryption-Fix-ata-passthrough12-verify.patch
-Patch125:    0130-super0-use-define-for-char-array-in-examine_super0.patch
-Patch126:    0131-Makefile-add-more-compiler-flags.patch
-Patch127:    0133-mdstat-Rework-mdstat-external-arrays-handling.patch
-Patch128:    0134-mdadm-managemon.c-fix-coverity-issues.patch
-Patch129:    0135-mdadm-msg.c-fix-coverity-issues.patch
-Patch130:    0136-imsm-refactor-chunk-size-print.patch
-Patch131:    0137-mdadm-Grow-fix-coverity-issue-CHECKED_RETURN.patch
-Patch132:    0138-mdadm-Grow-fix-coverity-issue-RESOURCE_LEAK.patch
-Patch133:    0139-mdadm-Grow-fix-coverity-issue-STRING_OVERFLOW.patch
-Patch134:    0140-mdadm-Incremental-fix-coverity-issues.patch
-Patch135:    0141-mdadm-mdmon-fix-coverity-issue-CHECKED_RETURN.patch
-Patch136:    0142-mdadm-mdmon-fix-coverity-issue-RESOURCE_LEAK.patch
-Patch137:    0143-mdadm-mdopen-fix-coverity-issue-CHECKED_RETURN.patch
-Patch138:    0144-mdadm-mdopen-fix-coverity-issue-STRING_OVERFLOW.patch
-Patch139:    0145-mdadm-mdstat-fix-coverity-issue-CHECKED_RETURN.patch
-Patch140:    0146-mdadm-super0-fix-coverity-issue-CHECKED_RETURN-and-E.patch
-Patch141:    0147-mdadm-super1-fix-coverity-issue-CHECKED_RETURN.patch
-Patch142:    0148-mdadm-super1-fix-coverity-issue-DEADCODE.patch
-Patch143:    0149-mdadm-super1-fix-coverity-issue-EVALUATION_ORDER.patch
-Patch144:    0150-mdadm-super1-fix-coverity-issue-RESOURCE_LEAK.patch
-Patch145:    0151-policy.c-Fix-check_return-issue-in-Write_rules.patch
-Patch146:    0152-super-gpt.c-Fix-check_return-issue-in-load_gpt.patch
-Patch147:    0153-super-intel-fix-compilation-error.patch
-Patch148:    0154-super-intel-add-define-for-migr_state.patch
-Patch149:    0156-Grow_reshape-set-only-component_size-for-size-grow.patch
-Patch150:    0157-mdstat-fix-list-detach-issues.patch
-Patch151:    0158-md.4-replace-wrong-word.patch
-Patch152:    0159-mdadm-util.c-fix-coverity-issues.patch
-Patch153:    0160-mdadm-sysfs.c-fix-coverity-issues.patch
-Patch154:    0161-imsm-add-read-OROM-form-ACPI-UEFI-tables.patch
-Patch155:    0162-imsm-get-bus-from-VMD-driver-directory.patch
-Patch156:    0163-platform-intel-refactor-path_attached_to_hba.patch
-Patch157:    0164-mdadm-Change-displaying-of-devices-in-detail.patch
-Patch158:    0165-imsm-Remove-warning-and-refactor-add_to_super_imsm-c.patch
-Patch159:    0166-imsm-add-IMSM_OROM_CAPABILITIES_TPV-to-nvme-orom.patch
-Patch160:    0167-mdadm-Increase-number-limit-in-md-device-name-to-102.patch
-Patch161:    0168-imsm-save-checkpoint-prior-to-exit.patch
-Patch162:    0169-Examine.c-Fix-memory-leaks-in-Examine.patch
-Patch163:    0170-dlink.h-Fix-checkpatch-warnings-for-function-args.patch
-Patch164:    0171-Incremental-support-devnode-in-IncrementalRemove.patch
-Patch165:    0172-Detail.c-Fix-divide_by_zero-issue.patch
-Patch166:    0173-mdadm-Add-compilation-process-to-README.md.patch
-Patch167:    0174-mdadm-Grow-Update-new-level-when-starting-reshape.patch
-Patch168:    0175-mdadm-Grow-Update-reshape_progress-to-need_back-afte.patch
-Patch169:    0176-mdadm-Grow-Can-t-open-raid-when-running-grow-continu.patch
-Patch170:    0177-mdadm-Grow-sleep-a-while-after-removing-disk-in-impo.patch
-Patch171:    0178-mdadm-tests-wait-until-level-changes.patch
-Patch172:    0179-mdadm-tests-07changelevels-fix.patch
-Patch173:    0180-mdadm-tests-Remove-07reshape5intr.broken.patch
-Patch174:    0181-mdadm-tests-07testreshape5-fix.patch
-Patch175:    0182-mdadm-tests-remove-09imsm-assemble.broken.patch
-Patch176:    0183-mdadm-Manage-record-errno.patch
-Patch177:    0184-Remove-INSTALL-and-dev-null.patch
-Patch178:    0186-Incremental-Rename-IncrementalRemove.patch
-Patch179:    0187-sysfs-add-function-for-writing-to-sysfs-fd.patch
-Patch180:    0188-Mdmonitor-Fix-startup-with-missing-directory.patch
-Patch181:    0189-mdadm-add-xmalloc.h.patch
-Patch182:    0190-md.man-update-refference-to-raid5-ppl.rst.patch
-Patch183:    0191-util-fix-sys_hot_remove_disk.patch
-Patch184:    0192-Rename-Monitor.c-to-mdmonitor.c.patch
-Patch185:    0193-super-intel-move-scsi_get_serial-from-sg_io.patch
-Patch186:    0194-mdmonitor-Abandon-custom-configuration-files.patch
-Patch187:    0195-mdadm.man-elaborate-more-about-mdmonitor.service.patch
-Patch188:    0196-mdadm-Add-mdadm_status.h.patch
-Patch189:    0197-mdadm.conf.man-Explain-udev-rule.patch
-Patch190:    0198-mdadm.man-Add-udev-rules-flag.patch
-Patch191:    0199-util-use-only-dev-directory-in-open_dev.patch
-Patch192:    0200-mdadm-Manage-Clear-superblock-if-adding-new-device-f.patch
-Patch193:    0201-mdadm-Grow-Check-new_level-interface-rather-than-ker.patch
+Patch000:    0001-Coverity-fixes-resources-leaks.patch
+Patch001:    0002-Incremental-Document-workaround.patch
+Patch002:    0003-sysfs-functions-for-writing-md-memb-state.patch
+Patch003:    0004-Incremental-Simplify-remove-logic.patch
+Patch004:    0005-checkpatch.conf-ignore-NEW_TYPEDEFS.patch
+Patch005:    0006-mdadm-add-MAINTAINERS-file.patch
+Patch006:    0007-mdadm.man-Remove-external-bitmap.patch
+Patch007:    0008-Remove-freeze-reshape-logic.patch
+Patch008:    0009-Detail-Export-reshape-status.patch
+Patch009:    0010-mdadm-Do-not-start-reshape-before-switchroot.patch
+Patch010:    0011-Better-error-messages-for-broken-reshape.patch
+Patch011:    0012-Refactor-continue_via_systemd.patch
+Patch012:    0013-mdadm-raid6check-add-xmalloc.h-to-raid6check.c.patch
+Patch013:    0014-mdopen-add-sbin-path-to-env-PATH-when-call-system-mo.patch
+Patch014:    0015-udev-persist-properties-of-MD-devices-after-switch_r.patch
+Patch015:    0016-mdadm-fix-grow-with-add-for-linear.patch
+Patch016:    0017-platform-intel-Disable-legacy-option-ROM-scan-on-UEF.patch
+Patch017:    0018-super-ddf-Prevent-crash-when-handling-DDF-metadata.patch
+Patch018:    0019-super-ddf-optimize-DDF-header-search-for-widely-used.patch
+Patch019:    0020-bitmap.h-clear-__KERNEL__-based-headers.patch
+Patch020:    0021-bitmap.h-Minor-fixes.patch
+Patch021:    0022-Move-release-steps-to-documentation.patch
+Patch022:    0023-Rework-MAINTAINERS-file.patch
+Patch023:    0024-mdmon-imsm-fix-metadata-corruption-when-managing-new.patch
+Patch024:    0025-Regression-fix-156.patch
+Patch025:    0026-super1-Clear-extra-flags-when-initializing-metadata.patch
+Patch026:    0027-imsm-Fix-RAID0-to-RAID10-migration.patch
+Patch027:    0028-Allow-RAID0-to-be-created-with-v0.90-metadata-161.patch
+Patch028:    0029-Update-tests.yml.patch
+Patch029:    0030-Update-tests.yml.patch
+Patch030:    0031-Update-tests.yml.patch
+Patch031:    0032-Update-tests.yml.patch
+Patch032:    0033-This-is-a-test-for-CI-do-not-merge.patch
+Patch033:    0034-Update-README.md.patch
+Patch034:    0035-mdadm-Remove-klibc-and-uclibc-support.patch
+Patch035:    0036-mdadm-include-asm-byteorder.h.patch
+Patch036:    0037-mdadm-use-kernel-raid-headers.patch
+Patch037:    mdadm-use-standard-libc-nftw.patch
 
 # Fedora customization patches
-
+Patch196:    mdadm-fix-building-errors.patch
+Patch197:    mdadm-check-posix-name-before-setting-name-and-devna.patch 
 Patch200:    mdadm-udev.patch
 Patch201:    mdadm-2.5.2-static.patch
-Patch202:    mdadm-check-posix-name-before-setting-name-and-devna.patch
 
 BuildRequires: make
 BuildRequires: systemd-rpm-macros binutils-devel gcc systemd-devel
@@ -292,9 +136,13 @@ install -m644 %{SOURCE5} %{buildroot}/etc/libreport/events.d
 /usr/share/mdadm/mdcheck
 
 %changelog
-* Sat Oct 25 2025 Xiao Ni <xni@redhat.com> 4.3-5
-- allow assemble with name which has :
-- Resolves RHEL-109231
+* Mon May 19 2025 Xiao Ni <xni@redhat.com> 4.4-2
+- mdadm grow command can't work
+- Resolves RHEL-92270
+
+* Wed Apr 30 2025 Xiao Ni <xni@redhat.com> 4.4
+- Update to mdadm 4.4
+- Resolves RHEL-87288 RHEL-72801 RHEL-88792 RHEL-88790 RHEL-63402 RHEL-72756
 
 * Sat Oct 19 2024 Xiao Ni <xni@redhat.com> 4.3-4
 - Update to latest upstream

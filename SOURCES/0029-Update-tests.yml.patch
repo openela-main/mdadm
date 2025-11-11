@@ -1,0 +1,45 @@
+From b532421e747d75223c6f7a065fb643d2d318011c Mon Sep 17 00:00:00 2001
+From: Paul Luse <paul.e.luse@intel.com>
+Date: Thu, 24 Apr 2025 07:30:10 -0700
+Subject: [PATCH 29/39] Update tests.yml
+
+Signed-off-by: Paul Luse <paul.e.luse@intel.com>
+---
+ .github/workflows/tests.yml | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+index ce940108..6f8e2b8e 100644
+--- a/.github/workflows/tests.yml
++++ b/.github/workflows/tests.yml
+@@ -31,9 +31,15 @@ jobs:
+      - name: 'Prepare machine'
+        run: |
+           cd ..
+-          vagrant halt
++          vagrant snapshot restore clean_vm_v42
++          echo "FYI vagrant restore command finished with exit code: $?"
++          sleep 2
+           vagrant status
+           vagrant up
++          sleep 2
++          vagrant ssh -c "sudo timedatectl set-timezone UTC && \
++            sudo systemctl restart chronyd && sudo chronyc -a makestep && sleep 1"
++          echo "FYI vagrant time command finished with exit code: $?" 
+ 
+      - name: 'Run tests'
+        id: testing
+@@ -69,9 +75,7 @@ jobs:
+     runs-on: self-hosted
+     needs: [upstream_tests]
+     steps:
+-      - name: Restore clean VM
++      - name: Halt VM
+         run:  |
+           cd ..
+-          vagrant up
+-          vagrant ssh -c "sudo mdadm -Ss"
+           vagrant halt
+-- 
+2.41.0
+

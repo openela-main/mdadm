@@ -1,0 +1,48 @@
+From 70cba6ba8e83f2971d17ce6e36076d46191766d9 Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Thu, 10 Oct 2024 12:45:11 +0000
+Subject: [PATCH 11/39] Better error messages for broken reshape
+
+mdadm --grow --continue has no functionality to restore critical sectors
+if reshape was stopped during operation. This functionality belongs to
+assemble or incremental.
+
+This patch adds hints to error messages, to try to reassemble array in
+case of reshape failure to restore critical sector, so assemble can
+handle restoration.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+---
+ Grow.c        | 1 +
+ super-intel.c | 3 ++-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/Grow.c b/Grow.c
+index 2719346c..818eb6a4 100644
+--- a/Grow.c
++++ b/Grow.c
+@@ -2387,6 +2387,7 @@ static int verify_reshape_position(struct mdinfo *info, int level)
+ 			} else if (info->reshape_progress > position) {
+ 				pr_err("Fatal error: array reshape was not properly frozen (expected reshape position is %llu, but reshape progress is %llu.\n",
+ 				       position, info->reshape_progress);
++				pr_err("Reassemble array to try to restore critical sector.\n");
+ 				ret_val = -1;
+ 			} else {
+ 				dprintf("Reshape position in md and metadata are the same;");
+diff --git a/super-intel.c b/super-intel.c
+index 7e3c5f2b..cab84198 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -12596,7 +12596,8 @@ static int imsm_manage_reshape(
+ 		init_migr_record_imsm(st, dev, sra);
+ 	else {
+ 		if (__le32_to_cpu(migr_rec->rec_status) != UNIT_SRC_NORMAL) {
+-			dprintf("imsm: cannot restart migration when data are present in copy area.\n");
++			pr_err("imsm: Cannot restart migration when data are present in copy area.\n"
++			       "      Reassemble array to try to restore critical sector.\n");
+ 			goto abort;
+ 		}
+ 		/* Save checkpoint to update migration record for current
+-- 
+2.41.0
+

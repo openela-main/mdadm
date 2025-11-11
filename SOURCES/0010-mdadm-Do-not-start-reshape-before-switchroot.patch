@@ -1,0 +1,217 @@
+From 8a0d3fea424c1c19c51993c0849ea76ea41e8003 Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Thu, 10 Oct 2024 10:31:06 +0000
+Subject: [PATCH 10/39] mdadm: Do not start reshape before switchroot
+
+There are numerous issues for --grow --continue in switchroot phrase,
+they include:
+* Events being missed for restarting grow-continue service. This is
+  apparent mostly on OS on RAID scenarios. When a checkpoint (next step)
+  is committed, we have no reliable way to gracefully stop reshape until
+  it reaches that checkpoint. During boot, there's heavy I/O utilisation,
+  which causes sync speed drop, and naturally checkpoint takes longer to
+  reach. This further causes systemd to forcefully kill grow-continue
+  service due to timeouts, which results in udev event being missed for
+  grow-continue service restart.
+* Grow-continue (seemingly) was not designed to be restarted without
+  reassembly, some things like stopping chunksize (to lower) migration
+  were straight up not working until recently.
+This patch makes grow-continue (actual reshape) start after switchroot
+phrase. This way we should not encounter issues related to restarting
+the service.
+
+Add checks not start a reshape if in initrd, let it initialise only.
+Change grow-continue udev rule to be triggered whenever there's a
+reshape happening in metadata, rely on udev event to kick reshape after
+switchroot. Add handle_forking helper function for reshapes to avoid
+duplicating code.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+---
+ Grow.c                    | 81 +++++++++++++++++++++++++++------------
+ mdadm_status.h            |  3 +-
+ udev-md-raid-arrays.rules |  3 +-
+ util.c                    |  1 +
+ 4 files changed, 61 insertions(+), 27 deletions(-)
+
+diff --git a/Grow.c b/Grow.c
+index 0d9e3b53..2719346c 100644
+--- a/Grow.c
++++ b/Grow.c
+@@ -2995,6 +2995,34 @@ static void catch_term(int sig)
+ 	sigterm = 1;
+ }
+ 
++
++/**
++ * handle_forking() - Handle reshape forking.
++ *
++ * @forked: if already forked.
++ * @devname: device name.
++ * Returns: -1 if fork() failed,
++ *           0 if child process,
++ *           1 if job delegated to forked process or systemd.
++ *
++ * This function is a helper function for reshapes for fork handling.
++ */
++static mdadm_status_t handle_forking(bool forked, char *devname)
++{
++	if (forked)
++		return MDADM_STATUS_FORKED;
++
++	if (devname && continue_via_systemd(devname, GROW_SERVICE, NULL))
++		return MDADM_STATUS_SUCCESS;
++
++	switch (fork()) {
++	case -1: return MDADM_STATUS_ERROR; /* error */
++	case 0: return MDADM_STATUS_FORKED; /* child */
++	default: return MDADM_STATUS_SUCCESS; /* parent */
++	}
++
++}
++
+ static int reshape_array(char *container, int fd, char *devname,
+ 			 struct supertype *st, struct mdinfo *info,
+ 			 int force, struct mddev_dev *devlist,
+@@ -3485,33 +3513,35 @@ started:
+ 	if (restart)
+ 		sysfs_set_str(sra, NULL, "array_state", "active");
+ 
+-	if (!forked)
+-		if (continue_via_systemd(container ?: sra->sys_name,
+-					 GROW_SERVICE, NULL)) {
+-			free(fdlist);
+-			free(offsets);
+-			sysfs_free(sra);
+-			return 0;
+-		}
++	/* Do not run in initrd */
++	if (in_initrd()) {
++		free(fdlist);
++		free(offsets);
++		sysfs_free(sra);
++		pr_info("Reshape has to be continued from location %llu when root filesystem has been mounted.\n",
++			sra->reshape_progress);
++		return 1;
++	}
+ 
+ 	/* Now we just need to kick off the reshape and watch, while
+ 	 * handling backups of the data...
+ 	 * This is all done by a forked background process.
+ 	 */
+-	switch(forked ? 0 : fork()) {
+-	case -1:
++	switch (handle_forking(forked, container ? container : sra->sys_name)) {
++	default: /* Unused, only to satisfy compiler. */
++	case MDADM_STATUS_ERROR: /* error */
+ 		pr_err("Cannot run child to monitor reshape: %s\n",
+ 			strerror(errno));
+ 		abort_reshape(sra);
+ 		goto release;
+-	default:
++	case MDADM_STATUS_FORKED: /* child */
++		map_fork();
++		break;
++	case MDADM_STATUS_SUCCESS: /* parent */
+ 		free(fdlist);
+ 		free(offsets);
+ 		sysfs_free(sra);
+ 		return 0;
+-	case 0:
+-		map_fork();
+-		break;
+ 	}
+ 
+ 	/* Close unused file descriptor in the forked process */
+@@ -3680,22 +3710,19 @@ int reshape_container(char *container, char *devname,
+ 	 */
+ 	ping_monitor(container);
+ 
+-	if (!forked)
+-		if (continue_via_systemd(container, GROW_SERVICE, NULL))
+-			return 0;
+-
+-	switch (forked ? 0 : fork()) {
+-	case -1: /* error */
++	switch (handle_forking(forked, container)) {
++	default: /* Unused, only to satisfy compiler. */
++	case MDADM_STATUS_ERROR: /* error */
+ 		perror("Cannot fork to complete reshape\n");
+ 		unfreeze(st);
+ 		return 1;
+-	default: /* parent */
+-		printf("%s: multi-array reshape continues in background\n", Name);
+-		return 0;
+-	case 0: /* child */
++	case MDADM_STATUS_FORKED: /* child */
+ 		manage_fork_fds(0);
+ 		map_fork();
+ 		break;
++	case MDADM_STATUS_SUCCESS: /* parent */
++		printf("%s: multi-array reshape continues in background\n", Name);
++		return 0;
+ 	}
+ 
+ 	/* close unused handle in child process
+@@ -3791,6 +3818,12 @@ int reshape_container(char *container, char *devname,
+ 				   c->backup_file, c->verbose, 1, restart);
+ 		close(fd);
+ 
++		/* Do not run reshape in initrd but let it initialize.*/
++		if (in_initrd()) {
++			sysfs_free(cc);
++			exit(0);
++		}
++
+ 		restart = 0;
+ 		if (rv)
+ 			break;
+diff --git a/mdadm_status.h b/mdadm_status.h
+index 905105e2..e244127c 100644
+--- a/mdadm_status.h
++++ b/mdadm_status.h
+@@ -7,7 +7,8 @@ typedef enum mdadm_status {
+ 	MDADM_STATUS_SUCCESS = 0,
+ 	MDADM_STATUS_ERROR,
+ 	MDADM_STATUS_UNDEF,
+-	MDADM_STATUS_MEM_FAIL
++	MDADM_STATUS_MEM_FAIL,
++	MDADM_STATUS_FORKED
+ } mdadm_status_t;
+ 
+ #endif
+diff --git a/udev-md-raid-arrays.rules b/udev-md-raid-arrays.rules
+index 4e64b249..d8de6d00 100644
+--- a/udev-md-raid-arrays.rules
++++ b/udev-md-raid-arrays.rules
+@@ -15,7 +15,6 @@ ENV{DEVTYPE}=="partition", GOTO="md_ignore_state"
+ ATTR{md/metadata_version}=="external:[A-Za-z]*", ATTR{md/array_state}=="inactive", GOTO="md_ignore_state"
+ TEST!="md/array_state", ENV{SYSTEMD_READY}="0", GOTO="md_end"
+ ATTR{md/array_state}=="clear*|inactive", ENV{SYSTEMD_READY}="0", GOTO="md_end"
+-ATTR{md/sync_action}=="reshape", ENV{RESHAPE_ACTIVE}="yes"
+ LABEL="md_ignore_state"
+ 
+ IMPORT{program}="BINDIR/mdadm --detail --no-devices --export $devnode"
+@@ -40,6 +39,6 @@ ENV{MD_LEVEL}=="raid[1-9]*", ENV{SYSTEMD_WANTS}+="mdmonitor.service"
+ ENV{MD_LEVEL}=="raid[1-9]*", ENV{MD_CONTAINER}=="?*", PROGRAM="/usr/bin/readlink $env{MD_CONTAINER}", ENV{MD_MON_THIS}="%c"
+ ENV{MD_MON_THIS}=="?*", TEST=="/etc/initrd-release", PROGRAM="/usr/bin/basename $env{MD_MON_THIS}", ENV{SYSTEMD_WANTS}+="mdmon@initrd-%c.service"
+ ENV{MD_MON_THIS}=="?*", TEST!="/etc/initrd-release", PROGRAM="/usr/bin/basename $env{MD_MON_THIS}", ENV{SYSTEMD_WANTS}+="mdmon@%c.service"
+-ENV{RESHAPE_ACTIVE}=="yes", PROGRAM="/usr/bin/basename $env{MD_MON_THIS}", ENV{SYSTEMD_WANTS}+="mdadm-grow-continue@%c.service"
++ENV{MD_RESHAPE_ACTIVE}=="True", PROGRAM="/usr/bin/basename $env{MD_MON_THIS}", ENV{SYSTEMD_WANTS}+="mdadm-grow-continue@%c.service"
+ 
+ LABEL="md_end"
+diff --git a/util.c b/util.c
+index 6aa44a80..8099852f 100644
+--- a/util.c
++++ b/util.c
+@@ -2307,6 +2307,7 @@ int continue_via_systemd(char *devnm, char *service_name, char *prefix)
+ 	int pid, status;
+ 	char pathbuf[1024];
+ 
++	dprintf("Start %s service\n", service_name);
+ 	/* Simply return that service cannot be started */
+ 	if (check_env("MDADM_NO_SYSTEMCTL"))
+ 		return 0;
+-- 
+2.41.0
+

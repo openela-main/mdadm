@@ -1,0 +1,223 @@
+From cbc1cd589496a4ae16eb226a7fbad71a7d3d842d Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Wed, 16 Oct 2024 10:48:08 +0000
+Subject: [PATCH 08/39] Remove --freeze-reshape logic
+
+This commit removes --freeze-reshape logic, it basicaly reverts
+commit b76b30e0f950 ("Do not continue reshape during initrd phase").
+--freeze-reshape was supposed to be used to restore critical sector in
+incremental and assemble operations without starting a reshape process,
+but it's meaning has been lost through the years and it is not
+currently used.
+
+A replacement for this logic will be added in incoming patches, so
+reshapes won't be started in initrd phrase.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+---
+ Grow.c     | 30 +++++++-----------------------
+ ReadMe.c   |  1 -
+ mdadm.8.in | 37 -------------------------------------
+ mdadm.c    |  6 ------
+ mdadm.h    |  2 --
+ 5 files changed, 7 insertions(+), 69 deletions(-)
+
+diff --git a/Grow.c b/Grow.c
+index cc1be6cc..0d9e3b53 100644
+--- a/Grow.c
++++ b/Grow.c
+@@ -1746,7 +1746,7 @@ static int reshape_array(char *container, int fd, char *devname,
+ 			 int force, struct mddev_dev *devlist,
+ 			 unsigned long long data_offset,
+ 			 char *backup_file, int verbose, int forked,
+-			 int restart, int freeze_reshape);
++			 int restart);
+ static int reshape_container(char *container, char *devname,
+ 			     int mdfd,
+ 			     struct supertype *st,
+@@ -2341,7 +2341,7 @@ size_change_error:
+ 		sync_metadata(st);
+ 		rv = reshape_array(container, fd, devname, st, &info, c->force,
+ 				   devlist, s->data_offset, c->backup_file,
+-				   c->verbose, 0, 0, 0);
++				   c->verbose, 0, 0);
+ 		frozen = 0;
+ 	}
+ release:
+@@ -3000,7 +3000,7 @@ static int reshape_array(char *container, int fd, char *devname,
+ 			 int force, struct mddev_dev *devlist,
+ 			 unsigned long long data_offset,
+ 			 char *backup_file, int verbose, int forked,
+-			 int restart, int freeze_reshape)
++			 int restart)
+ {
+ 	struct reshape reshape;
+ 	int spares_needed;
+@@ -3484,14 +3484,6 @@ started:
+ 	}
+ 	if (restart)
+ 		sysfs_set_str(sra, NULL, "array_state", "active");
+-	if (freeze_reshape) {
+-		free(fdlist);
+-		free(offsets);
+-		sysfs_free(sra);
+-		pr_err("Reshape has to be continued from location %llu when root filesystem has been mounted.\n",
+-			sra->reshape_progress);
+-		return 1;
+-	}
+ 
+ 	if (!forked)
+ 		if (continue_via_systemd(container ?: sra->sys_name,
+@@ -3688,7 +3680,7 @@ int reshape_container(char *container, char *devname,
+ 	 */
+ 	ping_monitor(container);
+ 
+-	if (!forked && !c->freeze_reshape)
++	if (!forked)
+ 		if (continue_via_systemd(container, GROW_SERVICE, NULL))
+ 			return 0;
+ 
+@@ -3698,8 +3690,7 @@ int reshape_container(char *container, char *devname,
+ 		unfreeze(st);
+ 		return 1;
+ 	default: /* parent */
+-		if (!c->freeze_reshape)
+-			printf("%s: multi-array reshape continues in background\n", Name);
++		printf("%s: multi-array reshape continues in background\n", Name);
+ 		return 0;
+ 	case 0: /* child */
+ 		manage_fork_fds(0);
+@@ -3797,15 +3788,9 @@ int reshape_container(char *container, char *devname,
+ 
+ 		rv = reshape_array(container, fd, adev, st,
+ 				   content, c->force, NULL, INVALID_SECTORS,
+-				   c->backup_file, c->verbose, 1, restart,
+-				   c->freeze_reshape);
++				   c->backup_file, c->verbose, 1, restart);
+ 		close(fd);
+ 
+-		if (c->freeze_reshape) {
+-			sysfs_free(cc);
+-			exit(0);
+-		}
+-
+ 		restart = 0;
+ 		if (rv)
+ 			break;
+@@ -5220,8 +5205,7 @@ int Grow_continue(int mdfd, struct supertype *st, struct mdinfo *info,
+ 	} else
+ 		ret_val = reshape_array(NULL, mdfd, "array", st, info, 1,
+ 					NULL, INVALID_SECTORS, c->backup_file,
+-					0, forked, 1 | info->reshape_active,
+-					c->freeze_reshape);
++					0, forked, 1 | info->reshape_active);
+ 
+ 	return ret_val;
+ }
+diff --git a/ReadMe.c b/ReadMe.c
+index 9c29723f..c2415c26 100644
+--- a/ReadMe.c
++++ b/ReadMe.c
+@@ -158,7 +158,6 @@ struct option long_options[] = {
+ 	{"scan", 0, 0, 's'},
+ 	{"force", 0, 0, Force},
+ 	{"update", 1, 0, 'U'},
+-	{"freeze-reshape", 0, 0, FreezeReshape},
+ 
+ 	/* Management */
+ 	{"add", 0, 0, Add},
+diff --git a/mdadm.8.in b/mdadm.8.in
+index 83c0689f..45255521 100644
+--- a/mdadm.8.in
++++ b/mdadm.8.in
+@@ -880,31 +880,6 @@ different versions of
+ .I mdadm
+ are used to add different devices).
+ 
+-.TP
+-.BR \-\-continue
+-This option is complementary to the
+-.B \-\-freeze-reshape
+-option for assembly. It is needed when
+-.B \-\-grow
+-operation is interrupted and it is not restarted automatically due to
+-.B \-\-freeze-reshape
+-usage during array assembly.  This option is used together with
+-.BR \-G
+-, (
+-.BR \-\-grow
+-) command and device for a pending reshape to be continued.
+-All parameters required for reshape continuation will be read from array metadata.
+-If initial
+-.BR \-\-grow
+-command had required
+-.BR \-\-backup\-file=
+-option to be set, continuation option will require to have exactly the same
+-backup file given as well.
+-.IP
+-Any other parameter passed together with
+-.BR \-\-continue
+-option will be ignored.
+-
+ .TP
+ .BR \-N ", " \-\-name=
+ Set a
+@@ -1302,18 +1277,6 @@ or
+ and allows the array to be again used on a kernel prior to Linux 5.3.
+ This option should be used with great caution.
+ 
+-.TP
+-.BR \-\-freeze\-reshape
+-This option is intended to be used in start-up scripts during the initrd boot phase.
+-When the array under reshape is assembled during the initrd phase, this option
+-stops the reshape after the reshape-critical section has been restored. This happens
+-before the file system pivot operation and avoids loss of filesystem context.
+-Losing file system context would cause reshape to be broken.
+-
+-Reshape can be continued later using the
+-.B \-\-continue
+-option for the grow command.
+-
+ .SH For Manage mode:
+ 
+ .TP
+diff --git a/mdadm.c b/mdadm.c
+index 7d3b656b..a72058b4 100644
+--- a/mdadm.c
++++ b/mdadm.c
+@@ -710,12 +710,6 @@ int main(int argc, char *argv[])
+ 		case O(MANAGE,Force): /* add device which is too large */
+ 			c.force = 1;
+ 			continue;
+-			/* now for the Assemble options */
+-		case O(ASSEMBLE, FreezeReshape):   /* Freeze reshape during
+-						    * initrd phase */
+-		case O(INCREMENTAL, FreezeReshape):
+-			c.freeze_reshape = 1;
+-			continue;
+ 		case O(CREATE,'u'): /* uuid of array */
+ 		case O(ASSEMBLE,'u'): /* uuid of array */
+ 			if (ident.uuid_set) {
+diff --git a/mdadm.h b/mdadm.h
+index 77705b11..6062e167 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -530,7 +530,6 @@ enum special_options {
+ 	RebuildMapOpt,
+ 	InvalidBackup,
+ 	UdevRules,
+-	FreezeReshape,
+ 	Continue,
+ 	OffRootOpt,
+ 	Prefer,
+@@ -680,7 +679,6 @@ struct context {
+ 	int	scan;
+ 	int	SparcAdjust;
+ 	int	delay;
+-	int	freeze_reshape;
+ 	char	*backup_file;
+ 	int	invalid_backup;
+ 	char	*action;
+-- 
+2.41.0
+

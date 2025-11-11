@@ -1,0 +1,33 @@
+From 25267bcc1eb403b2d837069289990afdc097031f Mon Sep 17 00:00:00 2001
+From: Mateusz Kusiak <mateusz.kusiak@intel.com>
+Date: Wed, 9 Oct 2024 11:24:13 +0000
+Subject: [PATCH 09/39] Detail: Export reshape status
+
+Display if there's an ongoing reshape happening in mdadm --detail
+--export output.
+
+This change is needed for incoming patches that will change "grow
+continue" udev rules, to be based on actual array state.
+
+Signed-off-by: Mateusz Kusiak <mateusz.kusiak@intel.com>
+---
+ Detail.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/Detail.c b/Detail.c
+index 5819ced9..b804a624 100644
+--- a/Detail.c
++++ b/Detail.c
+@@ -290,6 +290,9 @@ int Detail(char *dev, struct context *c)
+ 
+ 		map_free(map);
+ 		if (st && st->sb) {
++			if (info)
++				printf("MD_RESHAPE_ACTIVE=%s\n",
++				       info->reshape_active ? "True" : "False");
+ 			if (st->ss->export_detail_super)
+ 				st->ss->export_detail_super(st);
+ 		}
+-- 
+2.41.0
+

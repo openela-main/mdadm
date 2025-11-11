@@ -1,0 +1,91 @@
+From 8f54ce5b7eb0ca982803e270082e33f50897b9a6 Mon Sep 17 00:00:00 2001
+From: Nigel Croxon <ncroxon@redhat.com>
+Date: Mon, 4 Nov 2024 11:17:46 -0500
+Subject: [PATCH 01/39] Coverity fixes resources leaks
+
+Handle variable going out of scope leaks the handle.
+
+Signed-off-by: Nigel Croxon <ncroxon@redhat.com>
+---
+ Assemble.c    | 3 ++-
+ Incremental.c | 2 +-
+ bitmap.c      | 7 +++++--
+ 3 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/Assemble.c b/Assemble.c
+index 37a530ee..f8099cd3 100644
+--- a/Assemble.c
++++ b/Assemble.c
+@@ -753,6 +753,7 @@ static int load_devices(struct devs *devices, char *devmap,
+ 			tst->ss->free_super(tst);
+ 			free(tst);
+ 			*stp = st;
++			free(best);
+ 			return -1;
+ 		}
+ 		close(dfd);
+@@ -834,7 +835,6 @@ static int load_devices(struct devs *devices, char *devmap,
+ 				       inargv ? "the list" :
+ 				       "the\n      DEVICE list in mdadm.conf"
+ 					);
+-				free(best);
+ 				*stp = st;
+ 				goto error;
+ 			}
+@@ -857,6 +857,7 @@ error:
+ 	close(mdfd);
+ 	free(devices);
+ 	free(devmap);
++	free(best);
+ 	return -1;
+ 
+ }
+diff --git a/Incremental.c b/Incremental.c
+index aa5db3bf..9b455a12 100644
+--- a/Incremental.c
++++ b/Incremental.c
+@@ -282,7 +282,7 @@ int Incremental(struct mddev_dev *devlist, struct context *c,
+ 		 * clustering resource agents
+ 		 */
+ 		if (info.array.state & (1 << MD_SB_CLUSTERED))
+-			goto out;
++			goto out_unlock;
+ 
+ 		/* Couldn't find an existing array, maybe make a new one */
+ 		mdfd = create_mddev(match ? match->devname : NULL, name_to_use, trustworthy,
+diff --git a/bitmap.c b/bitmap.c
+index c62d18d4..3f8da63d 100644
+--- a/bitmap.c
++++ b/bitmap.c
+@@ -260,8 +260,11 @@ int ExamineBitmap(char *filename, int brief, struct supertype *st)
+ 		return rv;
+ 
+ 	info = bitmap_fd_read(fd, brief);
+-	if (!info)
++	if (!info) {
++		close_fd(&fd);
++		free(info);
+ 		return rv;
++	}
+ 	sb = &info->sb;
+ 	if (sb->magic != BITMAP_MAGIC) {
+ 		pr_err("This is an md array.  To view a bitmap you need to examine\n");
+@@ -336,7 +339,6 @@ int ExamineBitmap(char *filename, int brief, struct supertype *st)
+ 		printf("    Cluster name : %-64s\n", sb->cluster_name);
+ 		for (i = 0; i < (int)sb->nodes; i++) {
+ 			st = NULL;
+-			free(info);
+ 			fd = bitmap_file_open(filename, &st, i, fd);
+ 			if (fd < 0) {
+ 				printf("   Unable to open bitmap file on node: %i\n", i);
+@@ -347,6 +349,7 @@ int ExamineBitmap(char *filename, int brief, struct supertype *st)
+ 				printf("   Unable to read bitmap on node: %i\n", i);
+ 				continue;
+ 			}
++			free(sb);
+ 			sb = &info->sb;
+ 			if (sb->magic != BITMAP_MAGIC)
+ 				pr_err("invalid bitmap magic 0x%x, the bitmap file appears to be corrupted\n", sb->magic);
+-- 
+2.41.0
+
