@@ -3,7 +3,7 @@
 Name:        mdadm
 Version:     4.4
 # extraversion is used to define rhel internal version
-%define extraversion 2
+%define extraversion 3
 Release:     %{extraversion}%{?dist}
 Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 URL:         https://git.kernel.org/pub/scm/utils/mdadm/mdadm.git
@@ -59,6 +59,7 @@ Patch034:    0035-mdadm-Remove-klibc-and-uclibc-support.patch
 Patch035:    0036-mdadm-include-asm-byteorder.h.patch
 Patch036:    0037-mdadm-use-kernel-raid-headers.patch
 Patch037:    mdadm-use-standard-libc-nftw.patch
+Patch038:    0038-mdadm-enable-sync-file-for-udev-rules.patch
 
 # Fedora customization patches
 Patch196:    mdadm-fix-building-errors.patch
@@ -143,6 +144,10 @@ install -m644 %{SOURCE5} %{buildroot}/etc/libreport/events.d
 /usr/share/mdadm/mdcheck
 
 %changelog
+* Wed Nov 26 2025 Xiao Ni <xni@redhat.com> - 4.4-3
+- enable sync file for udev rules
+- Resolves: RHEL-130890
+
 * Mon May 19 2025 Xiao Ni <xni@redhat.com> - 4.4-2
 - grow command can't update chunksize
 - Resolves: RHEL-92288
