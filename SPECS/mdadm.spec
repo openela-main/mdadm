@@ -1,7 +1,7 @@
 Name:        mdadm
 Version:     4.4
 # extraversion is used to define rhel internal version
-%define extraversion 2
+%define extraversion 4
 Release:     %{extraversion}%{?dist}
 Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 URL:         https://git.kernel.org/pub/scm/utils/mdadm/mdadm.git
@@ -57,12 +57,19 @@ Patch034:    0035-mdadm-Remove-klibc-and-uclibc-support.patch
 Patch035:    0036-mdadm-include-asm-byteorder.h.patch
 Patch036:    0037-mdadm-use-kernel-raid-headers.patch
 Patch037:    mdadm-use-standard-libc-nftw.patch
+Patch038:    0038-mdadm-enable-sync-file-for-udev-rules.patch
+Patch039:    0039-mdadm-assemble-Don-t-stop-array-after-creating-it.patch
+Patch040:    0040-mdadm-incremental-set-sysfs-name-after-assembling-im.patch
+Patch041:    0041-mdadm-imsm-use-creation_time-for-ctime-in-container-.patch
+Patch042:    0042-mdadm-Create-array-with-sync-del-gendisk-mode.patch
+Patch043:    0043-mdadm-load-md_mod-first.patch
 
 # Fedora customization patches
 Patch196:    mdadm-fix-building-errors.patch
 Patch197:    mdadm-check-posix-name-before-setting-name-and-devna.patch 
 Patch200:    mdadm-udev.patch
 Patch201:    mdadm-2.5.2-static.patch
+Patch202:    mdadm-get-rhel-version.patch
 
 BuildRequires: make
 BuildRequires: systemd-rpm-macros binutils-devel gcc systemd-devel
@@ -136,6 +143,14 @@ install -m644 %{SOURCE5} %{buildroot}/etc/libreport/events.d
 /usr/share/mdadm/mdcheck
 
 %changelog
+* Tue Feb 10 2026 Xiao Ni <xni@redhat.com> 4.4-4
+- enable sync del mode and some booting fixes
+- Resolves RHEL-106747 RHEL-130808
+
+* Wed Nov 26 2025 Xiao Ni <xni@redhat.com> 4.4-3
+- udev change and don't stop array during assemble
+- Resolves RHEL-130808 RHEL-106747
+
 * Mon May 19 2025 Xiao Ni <xni@redhat.com> 4.4-2
 - mdadm grow command can't work
 - Resolves RHEL-92270
