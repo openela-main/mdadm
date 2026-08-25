@@ -1,0 +1,30 @@
+From a40a6a7e57095ad3ed20f827c2ad992cf7658699 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Wed, 13 Aug 2025 21:07:36 +0200
+Subject: [PATCH 59/74] mdcheck: make sure signals are processed immediately
+
+"systemctl stop mdcheck_start.service" may hang for a long time,
+because the shell doesn't handle signals until the sleep process in
+the foreground returns. Fix this by starting sleep in the background
+and waiting for it (the built-in "wait" receives the signal).
+
+Signed-off-by: Martin Wilck <mwilck@suse.com>
+---
+ misc/mdcheck | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/misc/mdcheck b/misc/mdcheck
+index aa2096612e56..398a1ea607ca 100644
+--- a/misc/mdcheck
++++ b/misc/mdcheck
+@@ -172,5 +172,6 @@ do
+ 		systemctl stop mdcheck_continue.timer
+ 		exit 0;
+ 	fi
+-	sleep 220
++	sleep 220 &
++	wait $!
+ done
+-- 
+2.50.1
+

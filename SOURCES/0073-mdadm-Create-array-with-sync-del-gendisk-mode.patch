@@ -1,0 +1,120 @@
+From d354d314db86379f18a4ccd35af9f6e56635b61d Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Fri, 24 Oct 2025 15:17:29 +0800
+Subject: [PATCH 73/74] mdadm: Create array with sync del gendisk mode
+
+kernel patch 9e59d609763f ('md: call del_gendisk in control path') calls
+del_gendisk in sync way. After the patch mentioned just now, device node
+(/dev/md0 .e.g) will disappear after mdadm --stop command. It resolves the
+problem raid can be created again because raid can be created when opening
+device node. Then regression tests will be interrupted.
+
+But it causes an error when assembling array which has been fixed by pr182.
+So people can't assemble array if they use new kernel and old mdadm. So
+in kernel space, 25db5f284fb8 ('md: add legacy_async_del_gendisk mod') is
+used to fix this problem. The default is async mode.
+
+async del mode will be removed in future. We'll start use sync del mode in
+new mdadm version. So people will not see failure when upgrading to the
+new mdadm version with sync del mode.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+---
+ mdadm.h  |  3 +++
+ mdopen.c |  5 +++++
+ util.c   | 45 +++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 53 insertions(+)
+
+diff --git a/mdadm.h b/mdadm.h
+index 84bd2c915fc2..7dcb20ed1f34 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -141,6 +141,8 @@ struct dlm_lksb {
+ #define MDMON_DIR "/run/mdadm"
+ #endif /* MDMON_DIR */
+ 
++#define MD_MOD_ASYNC_DEL_GENDISK "legacy_async_del_gendisk"
++
+ /* FAILED_SLOTS is where to save files storing recent removal of array
+  * member in order to allow future reuse of disk inserted in the same
+  * slot for array recovery
+@@ -855,6 +857,7 @@ extern int restore_stripes(int *dest, unsigned long long *offsets,
+ 			   unsigned long long start, unsigned long long length,
+ 			   char *src_buf);
+ extern bool sysfs_is_libata_allow_tpm_enabled(const int verbose);
++extern bool init_md_mod_param(void);
+ 
+ #ifndef Sendmail
+ #define Sendmail "/usr/lib/sendmail -t"
+diff --git a/mdopen.c b/mdopen.c
+index 57252b646137..b685603d6de5 100644
+--- a/mdopen.c
++++ b/mdopen.c
+@@ -148,6 +148,11 @@ int create_mddev(char *dev, char *name, int trustworthy,
+ 	char devnm[32];
+ 	char cbuf[400];
+ 
++	if (!init_md_mod_param()) {
++		pr_err("init md module parameters fail\n");
++		return -1;
++	}
++
+ 	if (!udev_is_available())
+ 		block_udev = 0;
+ 
+diff --git a/util.c b/util.c
+index 5d6fe800d666..146f38fddd82 100644
+--- a/util.c
++++ b/util.c
+@@ -2559,3 +2559,48 @@ bool is_file(const char *path)
+ 
+ 	return true;
+ }
++
++bool set_md_mod_parameter(const char *name, const char *value)
++{
++	char path[256];
++	int fd;
++	bool ret = true;
++
++	snprintf(path, sizeof(path), "/sys/module/md_mod/parameters/%s", name);
++
++	fd = open(path, O_WRONLY);
++	if (fd < 0) {
++		pr_err("Can't open %s\n", path);
++		return false;
++	}
++
++	if (write(fd, value, strlen(value)) != (ssize_t)strlen(value)) {
++		pr_err("Failed to write to %s\n", path);
++		ret = false;
++	}
++
++	close(fd);
++	return ret;
++}
++
++/* Init kernel md_mod parameters here if needed */
++bool init_md_mod_param(void)
++{
++	bool ret = true;
++
++	/*
++	 * In kernel 9e59d609763f calls del_gendisk in sync way. So device
++	 * node can be removed after stop command. But it can introduce a
++	 * regression which can be fixed by github pr182. New mdadm version
++	 * with pr182 can work well with new kernel. But users who don't
++	 * update mdadm and update to new kernel, they can't assemble array
++	 * anymore. So kernel adds a kernel parameter legacy_async_del_gendisk
++	 * and uses async as default.
++	 * We'll use sync mode since 6.18 rather than async mode. So in future
++	 * the kernel parameter will be removed.
++	 */
++	if (get_linux_version() >= 6018000)
++		ret = set_md_mod_parameter(MD_MOD_ASYNC_DEL_GENDISK, "N");
++
++	return ret;
++}
+-- 
+2.50.1
+

@@ -1,0 +1,55 @@
+From 9dfff1196f5f38269143ecbd574fe13cabeeeaa7 Mon Sep 17 00:00:00 2001
+From: Blazej Kucman <blazej.kucman@graidtech.com>
+Date: Wed, 28 Jan 2026 14:28:04 +0100
+Subject: [PATCH] imsm: Fix UEFI backward compatibility for RAID10D4
+
+The referenced commit introduces an incorrect RAID level set for RAID10 with 4 drives, which must
+remain backwards compatibility with UEFI VROC driver. For such RAID, VROC UEFI requires
+the MPB_ATTRIB_RAID1 level attribute in metadata and RAID1 in map. However, mentioned change cause
+writes RAID10 instead, which VROC UEFI cannot handle correctly.
+
+As a result, RAID10 4 disks is no longer recognized by VROC UEFI since version 9.3. On earlier
+versions the incorrect metadata may even cause a platform hang during the UEFI boot phase.
+
+The update_imsm_raid_level() function handles both creation and migration flows. During RAID
+creation, the function receives an initial map where the `level` variable is set to 0. This causes
+the code path responsible for the R0 -> R10 migration to run.
+
+To prevent the above behavior, a new define IMSM_T_LEVEL_UNKNOWN is introduced and used to
+initialize the `level` variable in map during volume creation, ensuring that the migration path
+is not entered.
+
+Steps to reproduce:
+mdadm -C /dev/md/imsm0 -e imsm -n 4 /dev/nvme[1,2,3,4]n1 -R
+mdadm -C /dev/md/vol -l 10 4 /dev/nvme[1,2,3,4]n1 --assume-clean -R
+reboot
+
+Fixes: 127e38b59cbd ("imsm: Fix RAID0 to RAID10 migration")
+Signed-off-by: Blazej Kucman <blazej.kucman@graidtech.com>
+---
+ super-intel.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/super-intel.c b/super-intel.c
+index 2ff9d486..7cae5cd3 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -181,6 +181,7 @@ struct imsm_map {
+ #define IMSM_T_RAID1 1
+ #define IMSM_T_RAID5 5
+ #define IMSM_T_RAID10 10
++#define IMSM_T_LEVEL_UNKNOWN 255
+ 	__u8  num_members;	/* number of member disks */
+ 	__u8  num_domains;	/* number of parity domains */
+ 	__u8  failed_disk_num;  /* valid only when state is degraded */
+@@ -5792,6 +5793,7 @@ static int init_super_imsm_volume(struct supertype *st, mdu_array_info_t *info,
+ 	}
+ 	map->num_members = info->raid_disks;
+ 
++	map->raid_level = IMSM_T_LEVEL_UNKNOWN;
+ 	update_imsm_raid_level(map, info->level);
+ 	set_num_domains(map);
+ 
+-- 
+2.54.0
+

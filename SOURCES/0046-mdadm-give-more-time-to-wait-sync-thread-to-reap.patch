@@ -1,0 +1,39 @@
+From 1640b5c37bb870a9ae36d6e72e09dd8a47aeac43 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Thu, 8 May 2025 11:45:50 +0800
+Subject: [PATCH 46/74] mdadm: give more time to wait sync thread to reap
+
+01r5fail case reports error sometimes:
+++ '[' -n '2248 / 35840' ']'
+++ die 'resync or recovery is happening!'
+++ echo -e '\n\tERROR: resync or recovery is happening! \n'
+
+    ERROR: resync or recovery is happening!
+
+sync thread is reapped in md_thread. So we need to give more time to
+wait sync thread to reap.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+---
+ tests/func.sh | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/tests/func.sh b/tests/func.sh
+index e42c7d56d9a2..19ad8b3211e3 100644
+--- a/tests/func.sh
++++ b/tests/func.sh
+@@ -357,7 +357,10 @@ check() {
+ 		done
+ 	;;
+ 	nosync )
+-		sleep 0.5
++		# sync thread is reapped in md_thread, give it more time to wait sync thread
++		# to reap. Before this change, it gives 0.5s which is too small. Sometimes
++		# the sync thread can't be reapped and error happens
++		sleep 3
+ 		# Since 4.2 we delay the close of recovery until there has been a chance for
+ 		# spares to be activated.  That means that a recovery that finds nothing
+ 		# to do can still take a little longer than expected.
+-- 
+2.50.1
+

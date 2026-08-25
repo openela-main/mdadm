@@ -1,0 +1,33 @@
+From e05b13f97db18dfa98814fcebd9d1b58b9fcb8cd Mon Sep 17 00:00:00 2001
+From: Paul Luse <paul.e.luse@intel.com>
+Date: Thu, 1 May 2025 12:18:17 -0700
+Subject: [PATCH 40/74] Update run_mdadm_tests.sh
+
+Signed-off-by: Paul Luse <paul.e.luse@intel.com>
+---
+ .github/tools/run_mdadm_tests.sh | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/.github/tools/run_mdadm_tests.sh b/.github/tools/run_mdadm_tests.sh
+index 22d89a8c371a..8c287bde860e 100755
+--- a/.github/tools/run_mdadm_tests.sh
++++ b/.github/tools/run_mdadm_tests.sh
+@@ -2,7 +2,15 @@
+ 
+ sudo make clean
+ sudo make -j$(nproc)
++if [ $? -ne 0 ]; then
++  echo "Error: make command failed."
++  exit 1 
++fi
+ sudo make install
++if [ $? -ne 0 ]; then
++  echo "Error: make install command failed."
++  exit 1
++fi
+ sudo mdadm -Ss
+ sudo ./test setup
+ 
+-- 
+2.50.1
+

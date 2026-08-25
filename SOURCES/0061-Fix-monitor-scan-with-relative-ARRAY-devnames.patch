@@ -1,0 +1,39 @@
+From 574b11602fb210c5b3e5f6fe460ab21e7c7d998c Mon Sep 17 00:00:00 2001
+From: QRPp <awesome.walrus+github@gmail.com>
+Date: Mon, 1 Sep 2025 21:33:57 +0100
+Subject: [PATCH 61/74] Fix --monitor --scan with relative ARRAY devnames
+
+Since commit e702f392959d ("Mdmonitor: Fix segfault"), when configuration
+files used non-absolute ARRAY device names, commands like `mdadm --monitor
+--scan` failed with `mdadm: error opening devname: No such file or
+directory` unless run from the `/dev/md` directory.
+
+Signed-off-by: QRPp <awesome.walrus+github@gmail.com>
+---
+ mdmonitor.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/mdmonitor.c b/mdmonitor.c
+index ea35d98ede30..22b0a818f9bd 100644
+--- a/mdmonitor.c
++++ b/mdmonitor.c
+@@ -254,12 +254,14 @@ int Monitor(struct mddev_dev *devlist,
+ 				continue;
+ 			if (is_devname_ignore(mdlist->devname) == true)
+ 				continue;
+-			if (!is_mddev(mdlist->devname))
+-				continue;
+ 
+ 			st = xcalloc(1, sizeof *st);
+ 			snprintf(st->devname, MD_NAME_MAX + sizeof(DEV_MD_DIR), DEV_MD_DIR "%s",
+ 				 basename(mdlist->devname));
++			if (!is_mddev(st->devname)) {
++				free(st);
++				continue;
++			}
+ 			st->next = statelist;
+ 			st->devnm[0] = 0;
+ 			st->percent = RESYNC_UNKNOWN;
+-- 
+2.50.1
+

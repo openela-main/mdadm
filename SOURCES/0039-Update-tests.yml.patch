@@ -1,0 +1,28 @@
+From 02b7cacefe080c7c0f55b942b26bfcae9297587b Mon Sep 17 00:00:00 2001
+From: Paul Luse <paul.e.luse@intel.com>
+Date: Wed, 30 Apr 2025 17:45:32 -0700
+Subject: [PATCH 39/74] Update tests.yml
+
+Signed-off-by: Paul Luse <paul.e.luse@intel.com>
+---
+ .github/workflows/tests.yml | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+index 73082fd2ef15..ddba632dc13c 100644
+--- a/.github/workflows/tests.yml
++++ b/.github/workflows/tests.yml
+@@ -31,7 +31,9 @@ jobs:
+      - name: 'Prepare machine'
+        run: |
+           cd ..
+-          vagrant snapshot restore clean_vm_v42
++          # to upgrade the VMs to Fed42, comment the next line out and uncomment the one below that.
++          vagrant snapshot restore clean_vm_v1
++          # vagrant snapshot restore clean_vm_v42
+           echo "FYI vagrant restore command finished with exit code: $?"
+           sleep 2
+           vagrant status
+-- 
+2.50.1
+

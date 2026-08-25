@@ -1,0 +1,30 @@
+From ea4cdaea1a553685444a3fb39aae6b2cfee387ef Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Tue, 3 Jun 2025 08:49:29 +0800
+Subject: [PATCH 53/74] mdadm/assemble: Don't stop array after creating it
+
+It stops the array which is just created. From the comment it wants to
+stop the array if it has no content. But it hasn't added member disks,
+so it's a clean array. It's meaningless to do it.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+---
+ Assemble.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/Assemble.c b/Assemble.c
+index f8099cd32aa3..1949bf96c478 100644
+--- a/Assemble.c
++++ b/Assemble.c
+@@ -1570,8 +1570,6 @@ try_again:
+ 				goto try_again;
+ 			goto out;
+ 		}
+-		/* just incase it was started but has no content */
+-		ioctl(mdfd, STOP_ARRAY, NULL);
+ 	}
+ 
+ 	if (content != &info) {
+-- 
+2.50.1
+

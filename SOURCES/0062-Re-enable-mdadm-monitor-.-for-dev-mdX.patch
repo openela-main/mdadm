@@ -1,0 +1,108 @@
+From 456c6bed0b9e0866c75f0f7c8579d5f4f3f3e966 Mon Sep 17 00:00:00 2001
+From: "Dr. Joachim Schneider" <jesmx@hal.rhein-neckar.de>
+Date: Sat, 6 Sep 2025 20:28:07 +0200
+Subject: [PATCH 62/74] Re-enable mdadm --monitor ... for /dev/mdX
+
+This fixes a regression introduced with
+commit 84d969be8f6d ("Monitor: use snprintf to fill device name"):
+
+With this fix
+
+  mdadm --monitor --scan -1 -p <pgm>
+
+is possible again for /dev/mdX without symlink in /dev/md/.
+
+The bug can be reproduced by these steps:
+
+(a) Create block devices for testing:
+
+    $ dd if=/dev/zero of=/tmp/d0.bin bs=1M count=16
+    $ dd if=/dev/zero of=/tmp/d1.bin bs=1M count=16
+
+    $ losetup -f /tmp/d0.bin
+    $ losetup -f /tmp/d1.bin
+    $ losetup
+    NAME       SIZELIMIT OFFSET AUTOCLEAR RO BACK-FILE   DIO LOG-SEC
+    /dev/loop1         0      0         0  0 /tmp/d1.bin   0     512
+    /dev/loop0         0      0         0  0 /tmp/d0.bin   0     512
+
+(b) Create RAID-1 array '/dev/md0':
+
+    $ mdadm --create /dev/md0 --level=1 --raid-devices=2  \
+      /dev/loop0 /dev/loop1
+    ...
+    mdadm: array /dev/md0 started.
+
+(c) Check:
+
+    $ cat /proc/mdstat
+    Personalities : [raid1]
+    md0 : active raid1 loop1[1] loop0[0]
+          15360 blocks super 1.2 [2/2] [UU]
+
+    unused devices: <none>
+
+(d) Create 'mdadm.conf':
+
+    $ mdadm --detail --scan > /tmp/mdadm.conf
+    $ cat /tmp/mdadm.conf
+    ARRAY /dev/md0 metadata=1.2 UUID=c0280f55:9c32e4ff:34f85ea3:08d1331b
+
+(e) Use this bash script ('/tmp/report') for 'mdadm --monitor':
+
+    [[ $# -lt 2 ]] && exit 0
+
+    problem="$1"
+    shift
+    array="$1"
+    shift
+    args="$*"
+
+    echo "MD REPORT: ${problem} with ${array}: ${args}"
+
+(f) Call mdamd in monitor mode:
+
+    $ mdadm --monitor  -c /tmp/mdadm.conf --scan -1 -p /tmp/report
+
+    Without the fix one gets this output:
+
+      mdadm: DeviceDisappeared event detected on md device /dev/md/md0
+      MD REPORT: DeviceDisappeared with /dev/md/md0:
+      mdadm: NewArray event detected on md device /dev/md0
+      MD REPORT: NewArray with /dev/md0:
+
+    Only the output of the 'report'-script:
+
+      $ mdadm  --monitor  -c /tmp/mdadm.conf --scan -1  \
+        -p /tmp/report 2>/dev/null
+      MD REPORT: DeviceDisappeared with /dev/md/md0:
+      MD REPORT: NewArray with /dev/md0:
+
+    With the fix no (warning) output is produced:
+
+      $ /tmp/mdadm-FIXED  --monitor  -c /tmp/mdadm.conf --scan -1 \
+        -p /tmp/report
+
+Signed-off-by: Dr. Joachim Schneider <jesmx@hal.rhein-neckar.de>
+---
+ mdmonitor.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/mdmonitor.c b/mdmonitor.c
+index 22b0a818f9bd..314dafb4588b 100644
+--- a/mdmonitor.c
++++ b/mdmonitor.c
+@@ -256,8 +256,8 @@ int Monitor(struct mddev_dev *devlist,
+ 				continue;
+ 
+ 			st = xcalloc(1, sizeof *st);
+-			snprintf(st->devname, MD_NAME_MAX + sizeof(DEV_MD_DIR), DEV_MD_DIR "%s",
+-				 basename(mdlist->devname));
++			snprintf(st->devname, sizeof(st->devname), "%s%s",
++				 '/' == *mdlist->devname ? "" : DEV_MD_DIR, mdlist->devname);
+ 			if (!is_mddev(st->devname)) {
+ 				free(st);
+ 				continue;
+-- 
+2.50.1
+

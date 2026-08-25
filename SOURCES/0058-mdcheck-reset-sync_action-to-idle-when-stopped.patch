@@ -1,0 +1,95 @@
+From 303362bee868049959a0a3421080e685ff7cc4b2 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Wed, 13 Aug 2025 21:01:30 +0200
+Subject: [PATCH 58/74] mdcheck: reset sync_action to "idle" when stopped
+
+When the mdcheck script stops because the pre-set duration is exceeded, it
+will also set the sync action in the kernel to "idle". But when it is
+stopped by a signal (e.g. when the systemd service running it is stopped),
+it doesn't.  This is inconsistent behavior.
+
+Move the code that switches the sync_action to "idle" into a cleanup
+function that is always executed on exit. This requires separate "trap"
+statements for EXIT(0) and signals, because otherwise a race condition may
+arise between the cleanup code and the script body.
+
+Signed-off-by: Martin Wilck <mwilck@suse.com>
+---
+ misc/mdcheck | 50 +++++++++++++++++++++++++++-----------------------
+ 1 file changed, 27 insertions(+), 23 deletions(-)
+
+diff --git a/misc/mdcheck b/misc/mdcheck
+index 5f068121b924..aa2096612e56 100644
+--- a/misc/mdcheck
++++ b/misc/mdcheck
+@@ -66,15 +66,40 @@ shift
+ 
+ # We need a temp file occasionally...
+ tmp=/var/lib/mdcheck/.md-check-$$
+-trap 'rm -f "$tmp"' 0 2 3 15
++cnt=0
++
++cleanup() {
++    # We've waited, and there are still checks running.
++    # Time to stop them.
++    for i in `eval echo {1..$cnt}`
++    do
++	eval fl=\$MD_${i}_fl
++	eval sys=\$MD_${i}_sys
++	eval dev=\$MD_${i}_dev
++
++	if [ -z "$fl" ]; then continue; fi
++
++	if [ "`cat $sys/md/sync_action`" != 'check' ]
++	then
++	    eval MD_${i}_fl=
++	    rm -f $fl
++	    continue;
++	fi
++	echo idle > $sys/md/sync_action
++	cat $sys/md/sync_min > $fl
++	logger -p daemon.info pause checking $dev at `cat $fl`
++    done
++    rm -f "$tmp"
++}
+ 
++trap 'exit 129' 2 3 15
++trap 'cleanup' 0
+ 
+ # firstly, clean out really old state files
+ mkdir -p /var/lib/mdcheck
+ find /var/lib/mdcheck -name "MD_UUID*" -type f -mtime +180 -exec rm {} \;
+ 
+ # Now look at each md device.
+-cnt=0
+ for dev in /dev/md?*
+ do
+ 	[ -e "$dev" ] || continue
+@@ -149,24 +174,3 @@ do
+ 	fi
+ 	sleep 220
+ done
+-
+-# We've waited, and there are still checks running.
+-# Time to stop them.
+-for i in `eval echo {1..$cnt}`
+-do
+-	eval fl=\$MD_${i}_fl
+-	eval sys=\$MD_${i}_sys
+-	eval dev=\$MD_${i}_dev
+-
+-	if [ -z "$fl" ]; then continue; fi
+-
+-	if [ "`cat $sys/md/sync_action`" != 'check' ]
+-	then
+-		eval MD_${i}_fl=
+-		rm -f $fl
+-		continue;
+-	fi
+-	echo idle > $sys/md/sync_action
+-	cat $sys/md/sync_min > $fl
+-	logger -p daemon.info pause checking $dev at `cat $fl`
+-done
+-- 
+2.50.1
+

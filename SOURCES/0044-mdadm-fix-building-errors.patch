@@ -1,18 +1,20 @@
-From 46940fbca6df3ddffa71541e459a277d79584fc0 Mon Sep 17 00:00:00 2001
+From f815615ebf74a71064ba480ba773ef4bf98b53b0 Mon Sep 17 00:00:00 2001
 From: Xiao Ni <xni@redhat.com>
-Date: Wed, 30 Apr 2025 06:47:08 -0400
-Subject: [PATCH 1/1] mdadm: fix building errors
+Date: Wed, 7 May 2025 18:26:08 +0800
+Subject: [PATCH 44/74] mdadm: fix building errors
 
-This is a rhel-only patch and this patch will be sent to upstream.
+Some building errors are found in ppc64le platform:
+format '%llu' expects argument of type 'long long unsigned int', but
+argument 3 has type 'long unsigned int' [-Werror=format=]
 
 Signed-off-by: Xiao Ni <xni@redhat.com>
 ---
  super-ddf.c   | 9 +++++----
- super-intel.c | 2 +-
- 2 files changed, 6 insertions(+), 5 deletions(-)
+ super-intel.c | 3 ++-
+ 2 files changed, 7 insertions(+), 5 deletions(-)
 
 diff --git a/super-ddf.c b/super-ddf.c
-index 6e7db924..285d3b8b 100644
+index 6e7db924d2b1..dda8b7fedd64 100644
 --- a/super-ddf.c
 +++ b/super-ddf.c
 @@ -1606,9 +1606,9 @@ static void examine_vd(int n, struct ddf_super *sb, char *guid)
@@ -32,7 +34,7 @@ index 6e7db924..285d3b8b 100644
  		       be32_to_cpu(pd->refnum));
  		printf("%8lluK ",
 -		       be64_to_cpu(pd->config_size)>>1);
-+		       (unsigned long long)be64_to_cpu(pd->config_size)>>1);
++				(unsigned long long)be64_to_cpu(pd->config_size)>>1);
  		for (dl = sb->dlist; dl ; dl = dl->next) {
  			if (be32_eq(dl->disk.refnum, pd->refnum)) {
  				char *dv = map_dev(dl->major, dl->minor, 0);
@@ -42,23 +44,24 @@ index 6e7db924..285d3b8b 100644
  	__u64 cfs, t;
 -	cfs = min(dl->size - 32*1024*2ULL, be64_to_cpu(dl->primary_lba));
 +	cfs = min((unsigned long long)dl->size - 32*1024*2ULL,
-+			(unsigned long long)be64_to_cpu(dl->primary_lba));
++			(unsigned long long)(be64_to_cpu(dl->primary_lba)));
  	t = be64_to_cpu(dl->secondary_lba);
  	if (t != ~(__u64)0)
  		cfs = min(cfs, t);
 diff --git a/super-intel.c b/super-intel.c
-index b7b030a2..caa583d8 100644
+index b7b030a20432..4fbbc98d915c 100644
 --- a/super-intel.c
 +++ b/super-intel.c
-@@ -2325,7 +2325,7 @@ static void export_examine_super_imsm(struct supertype *st)
+@@ -2325,7 +2325,8 @@ static void export_examine_super_imsm(struct supertype *st)
  	printf("MD_LEVEL=container\n");
  	printf("MD_UUID=%s\n", nbuf+5);
  	printf("MD_DEVICES=%u\n", mpb->num_disks);
 -	printf("MD_CREATION_TIME=%llu\n", __le64_to_cpu(mpb->creation_time));
-+	printf("MD_CREATION_TIME=%llu\n", (unsigned long long)__le64_to_cpu(mpb->creation_time));
++	printf("MD_CREATION_TIME=%llu\n",
++			(unsigned long long)__le64_to_cpu(mpb->creation_time));
  }
  
  static void detail_super_imsm(struct supertype *st, char *homehost,
 -- 
-2.41.0
+2.50.1
 
