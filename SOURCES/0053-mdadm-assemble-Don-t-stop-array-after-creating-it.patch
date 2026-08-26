@@ -1,7 +1,7 @@
 From ea4cdaea1a553685444a3fb39aae6b2cfee387ef Mon Sep 17 00:00:00 2001
 From: Xiao Ni <xni@redhat.com>
 Date: Tue, 3 Jun 2025 08:49:29 +0800
-Subject: [PATCH 1/1] mdadm/assemble: Don't stop array after creating it
+Subject: [PATCH 53/74] mdadm/assemble: Don't stop array after creating it
 
 It stops the array which is just created. From the comment it wants to
 stop the array if it has no content. But it hasn't added member disks,

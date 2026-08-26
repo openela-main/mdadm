@@ -1,0 +1,29 @@
+From ca10248139610ffb53fe90224333513dcc3ca155 Mon Sep 17 00:00:00 2001
+From: Wu Guanghao <wuguanghao3@huawei.com>
+Date: Tue, 14 Oct 2025 11:49:11 +0800
+Subject: [PATCH 69/74] mdadm: Fix memory leak issue in load_ddf_local()
+
+dl->devname might be allocated space through xstrdup(). Before an
+abnormal exit, it needs to be checked and released.
+
+Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
+---
+ super-ddf.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/super-ddf.c b/super-ddf.c
+index 7b38f9125134..657c53abe729 100644
+--- a/super-ddf.c
++++ b/super-ddf.c
+@@ -1208,6 +1208,8 @@ static int load_ddf_local(int fd, struct ddf_super *super,
+ 	dl->devname = devname ? xstrdup(devname) : NULL;
+ 
+ 	if (fstat(fd, &stb) != 0) {
++		if (dl->devname)
++			free(dl->devname);
+ 		free(dl);
+ 		return 1;
+ 	}
+-- 
+2.50.1
+

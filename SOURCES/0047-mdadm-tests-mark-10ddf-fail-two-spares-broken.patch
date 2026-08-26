@@ -1,0 +1,38 @@
+From 882c8fda76772573acf2000a850106a09413d2e9 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Thu, 8 May 2025 12:45:32 +0800
+Subject: [PATCH 47/74] mdadm/tests: mark 10ddf-fail-two-spares broken
+
+Sometimes 10ddf-fail-two-spares fail because:
+++ grep -q 'state\[1\] : Optimal, Consistent' /tmp/mdtest-5k3MzO
+++ echo ERROR: /dev/md/vol1 should be optimal in meta data
+ERROR: /dev/md/vol1 should be optimal in meta data
+
+Mark this as broken.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+---
+ tests/10ddf-fail-two-spares.broken | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+ create mode 100644 tests/10ddf-fail-two-spares.broken
+
+diff --git a/tests/10ddf-fail-two-spares.broken b/tests/10ddf-fail-two-spares.broken
+new file mode 100644
+index 000000000000..d0158c042f22
+--- /dev/null
++++ b/tests/10ddf-fail-two-spares.broken
+@@ -0,0 +1,11 @@
++Sometimes
++
++++ grep -q 'state\[0\] : Optimal, Consistent' /tmp/mdtest-5k3MzO
++++ grep -q 'state\[1\] : Optimal, Consistent' /tmp/mdtest-5k3MzO
++++ echo ERROR: /dev/md/vol1 should be optimal in meta data
++ERROR: /dev/md/vol1 should be optimal in meta data
++
++if ! grep -q 'state\[1\] : Optimal, Consistent' $tmp; then
++    echo ERROR: $member1 should be optimal in meta data
++    ret=1
++fi
+-- 
+2.50.1
+

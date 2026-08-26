@@ -1,0 +1,44 @@
+From 7ecd1fe2d709ad84fbed29b1594f02fad52592cc Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Thu, 8 May 2025 17:56:08 +0800
+Subject: [PATCH 49/74] mdadm/tests: mark 10ddf-fail-readd-readonly broken
+
+10ddf-fail-readd-readonly fails sometimes. Mark this case broken.
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+---
+ tests/10ddf-fail-readd-readonly.broken | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+ create mode 100644 tests/10ddf-fail-readd-readonly.broken
+
+diff --git a/tests/10ddf-fail-readd-readonly.broken b/tests/10ddf-fail-readd-readonly.broken
+new file mode 100644
+index 000000000000..500343cd9814
+--- /dev/null
++++ b/tests/10ddf-fail-readd-readonly.broken
+@@ -0,0 +1,22 @@
++Sometimes
++
++This case fails sometimes like:
++mdadm: cannot open MISSING: No such file or directory
++++ return 1
++++ grep -q 'state\[0\] : Optimal, Consistent' /tmp/mdtest-bDoaoB
++++ echo ERROR: member 0 should be optimal in meta data on MISSING
++ERROR: member 0 should be optimal in meta data on MISSING
++++ ret=1
++++ for x in $@
++++ mdadm -E /dev/loop9
++++ rm -f /var/tmp/stderr
++++ case $* in
++++ case $* in
++++ /usr/sbin/mdadm -E /dev/loop9
++++ rv=0
++++ case $* in
++++ cat /var/tmp/stderr
++++ return 0
++++ grep -q 'state\[0\] : Optimal, Consistent' /tmp/mdtest-bDoaoB
++++ echo ERROR: member 0 should be optimal in meta data on /dev/loop9
++ERROR: member 0 should be optimal in meta data on /dev/loop9
+-- 
+2.50.1
+

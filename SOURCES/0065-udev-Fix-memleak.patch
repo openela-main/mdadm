@@ -1,0 +1,41 @@
+From d478aff31f466d126eaa5b018c93654b58047b40 Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mariusz.tkaczyk@dell.com>
+Date: Tue, 23 Sep 2025 08:06:12 +0200
+Subject: [PATCH 65/74] udev: Fix memleak
+
+According to manual:
+On success, udev_monitor_receive_device() returns a pointer to a newly
+referenced device that was received via the monitor. The caller is
+responsible to drop this reference when done.
+
+Signed-off-by: Mariusz Tkaczyk <mariusz.tkaczyk@dell.com>
+---
+ udev.c | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/udev.c b/udev.c
+index 961ca970d460..f857c723e4a1 100644
+--- a/udev.c
++++ b/udev.c
+@@ -147,9 +147,16 @@ enum udev_status udev_wait_for_events(int seconds)
+ 	tv.tv_sec = seconds;
+ 	tv.tv_usec = 0;
+ 
+-	if (select(fd + 1, &readfds, NULL, NULL, &tv) > 0 && FD_ISSET(fd, &readfds))
+-		if (udev_monitor_receive_device(udev_monitor))
++	if (select(fd + 1, &readfds, NULL, NULL, &tv) > 0 && FD_ISSET(fd, &readfds)) {
++		struct udev_device *dev = udev_monitor_receive_device(udev_monitor);
++
++		if (dev) {
++			udev_device_unref(dev);
+ 			return UDEV_STATUS_SUCCESS; /* event detected */
++		} else {
++			return UDEV_STATUS_ERROR;
++		}
++	}
+ 	return UDEV_STATUS_TIMEOUT;
+ }
+ #endif
+-- 
+2.50.1
+

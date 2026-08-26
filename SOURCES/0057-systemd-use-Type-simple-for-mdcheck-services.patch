@@ -1,0 +1,48 @@
+From 191957c3e4f8bcc3fdc251067e523732749f75cd Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Wed, 13 Aug 2025 19:28:08 +0200
+Subject: [PATCH 57/74] systemd: use "Type=simple" for mdcheck services
+
+"Type=oneshot" means that systemd considers the unit as started when the
+started process exits. But the "mdcheck" script may run for several
+hours.  Thus systemd will regard the unit as "activating" all the
+time. This can be easily tested by running "systemctl start
+mdcheck_start.service" manually. The systemctl command will not finish
+until the mdcheck utility has finished or Ctrl-C is typed, which is
+broken.
+
+Use "Type=simple" instead.
+
+Signed-off-by: Martin Wilck <mwilck@suse.com>
+---
+ systemd/mdcheck_continue.service | 2 +-
+ systemd/mdcheck_start.service    | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/systemd/mdcheck_continue.service b/systemd/mdcheck_continue.service
+index 70892a1f6018..cd12db850e42 100644
+--- a/systemd/mdcheck_continue.service
++++ b/systemd/mdcheck_continue.service
+@@ -11,6 +11,6 @@ ConditionPathExistsGlob=/var/lib/mdcheck/MD_UUID_*
+ Documentation=man:mdadm(8)
+ 
+ [Service]
+-Type=oneshot
++Type=simple
+ Environment="MDADM_CHECK_DURATION=6 hours"
+ ExecStart=/usr/share/mdadm/mdcheck --continue --duration ${MDADM_CHECK_DURATION}
+diff --git a/systemd/mdcheck_start.service b/systemd/mdcheck_start.service
+index fc4fc4388c6c..16ba6b67a1ce 100644
+--- a/systemd/mdcheck_start.service
++++ b/systemd/mdcheck_start.service
+@@ -11,6 +11,6 @@ Wants=mdcheck_continue.timer
+ Documentation=man:mdadm(8)
+ 
+ [Service]
+-Type=oneshot
++Type=simple
+ Environment="MDADM_CHECK_DURATION=6 hours"
+ ExecStart=/usr/share/mdadm/mdcheck --duration ${MDADM_CHECK_DURATION}
+-- 
+2.50.1
+

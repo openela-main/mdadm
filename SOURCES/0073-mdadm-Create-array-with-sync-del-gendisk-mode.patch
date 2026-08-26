@@ -1,7 +1,7 @@
 From d354d314db86379f18a4ccd35af9f6e56635b61d Mon Sep 17 00:00:00 2001
 From: Xiao Ni <xni@redhat.com>
 Date: Fri, 24 Oct 2025 15:17:29 +0800
-Subject: [PATCH 1/1] mdadm: Create array with sync del gendisk mode
+Subject: [PATCH 73/74] mdadm: Create array with sync del gendisk mode
 
 kernel patch 9e59d609763f ('md: call del_gendisk in control path') calls
 del_gendisk in sync way. After the patch mentioned just now, device node
@@ -116,5 +116,5 @@ index 5d6fe800d666..146f38fddd82 100644
 +	return ret;
 +}
 -- 
-2.51.0
+2.50.1
 

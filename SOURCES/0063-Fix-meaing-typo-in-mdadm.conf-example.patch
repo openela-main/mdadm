@@ -1,0 +1,28 @@
+From 388ef731dccff3b8da369c1968af7daf9b32fe1d Mon Sep 17 00:00:00 2001
+From: Amon Bune <admin@full-stack.ninja>
+Date: Mon, 29 Sep 2025 19:16:00 +0200
+Subject: [PATCH 63/74] Fix 'meaing' typo in mdadm.conf-example
+
+Fix typo in mdadm.conf example file
+
+Signed-off-by: Amon Bune <admin@full-stack.ninja>
+---
+ documentation/mdadm.conf-example | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/documentation/mdadm.conf-example b/documentation/mdadm.conf-example
+index 35a75d128a69..29dd55ab3148 100644
+--- a/documentation/mdadm.conf-example
++++ b/documentation/mdadm.conf-example
+@@ -28,7 +28,7 @@
+ #
+ #
+ # The AUTO line can control which arrays get assembled by auto-assembly,
+-# meaing either "mdadm -As" when there are no 'ARRAY' lines in this file,
++# meaning either "mdadm -As" when there are no 'ARRAY' lines in this file,
+ # or "mdadm --incremental" when the array found is not listed in this file.
+ # By default, all arrays that are found are assembled.
+ # If you want to ignore all DDF arrays (maybe they are managed by dmraid),
+-- 
+2.50.1
+

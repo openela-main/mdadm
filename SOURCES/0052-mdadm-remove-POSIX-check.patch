@@ -1,0 +1,219 @@
+From 0550fb37839866bb11ec139780d75f97d0765cfb Mon Sep 17 00:00:00 2001
+From: Mariusz Tkaczyk <mtkaczyk@kernel.org>
+Date: Sat, 5 Apr 2025 19:47:18 +0200
+Subject: [PATCH 52/74] mdadm: remove POSIX check
+
+Neil Brown in #159 pointed that mdadm should been keep in base utility
+style, allowing much more with no strict limitations until absolutely
+necessary to prevent crashes.
+
+This view, supported with regression #160 caused by POSIX portable
+character set requirement leads me to revert it.
+
+Revert the POSIX portable character set verification of name and
+devname. Make it IMSM only.
+
+Fixes: e2eb503bd797 ("mdadm: Follow POSIX Portable Character Set")
+Signed-off-by: Mariusz Tkaczyk <mtkaczyk@kernel.org>
+---
+ config.c          | 45 +++++++++------------------------------------
+ mdadm.8.in        | 24 ++++++++----------------
+ super-intel.c     | 11 +++++++++++
+ tests/00confnames | 13 +++++--------
+ 4 files changed, 33 insertions(+), 60 deletions(-)
+
+diff --git a/config.c b/config.c
+index 8a8ae5e48c41..e6ede3bbe45d 100644
+--- a/config.c
++++ b/config.c
+@@ -188,34 +188,6 @@ inline void ident_init(struct mddev_ident *ident)
+ 	ident->uuid_set = 0;
+ }
+ 
+-/** ident_check_name() - helper function to verify name.
+- * @name: name to check.
+- * @prop_name: the name of the property it is validated against, used for logging.
+- * @cmdline: context dependent actions.
+- *
+- * @name must follow name's criteria, be POSIX compatible and does not have leading dot.
+- */
+-static mdadm_status_t ident_check_name(const char *name, const char *prop_name, const bool cmdline)
+-{
+-	if (!is_string_lq(name, MD_NAME_MAX + 1)) {
+-		ident_log(prop_name, name, "Too long or empty", cmdline);
+-		return MDADM_STATUS_ERROR;
+-	}
+-
+-	if (*name == '.') {
+-		/* MD device should not be considered as hidden. */
+-		ident_log(prop_name, name, "Leading dot forbidden", cmdline);
+-		return MDADM_STATUS_ERROR;
+-	}
+-
+-	if (!is_name_posix_compatible(name)) {
+-		ident_log(prop_name, name, "Not POSIX compatible", cmdline);
+-		return MDADM_STATUS_ERROR;
+-	}
+-
+-	return MDADM_STATUS_SUCCESS;
+-}
+-
+ /**
+  * _ident_set_devname() - verify devname and set it in &mddev_ident.
+  * @ident: pointer to &mddev_ident.
+@@ -243,7 +215,6 @@ mdadm_status_t _ident_set_devname(struct mddev_ident *ident, const char *devname
+ 	static const char named_dev_pref[] = DEV_NUM_PREF "_";
+ 	static const int named_dev_pref_size = sizeof(named_dev_pref) - 1;
+ 	const char *prop_name = "devname";
+-	mdadm_status_t ret;
+ 	const char *name;
+ 
+ 	if (ident->devname) {
+@@ -270,9 +241,11 @@ mdadm_status_t _ident_set_devname(struct mddev_ident *ident, const char *devname
+ 	else
+ 		name = devname;
+ 
+-	ret = ident_check_name(name, prop_name, cmdline);
+-	if (ret)
+-		return ret;
++	if (!is_string_lq(name, MD_NAME_MAX + 1)) {
++		ident_log(prop_name, name, "Too long or empty", cmdline);
++		return MDADM_STATUS_ERROR;
++	}
++
+ pass:
+ 	ident->devname = xstrdup(devname);
+ 	return MDADM_STATUS_SUCCESS;
+@@ -294,16 +267,16 @@ mdadm_status_t ident_set_name(struct mddev_ident *ident, const char *name)
+ 	assert(ident);
+ 
+ 	const char *prop_name = "name";
+-	mdadm_status_t ret;
+ 
+ 	if (ident->name[0]) {
+ 		ident_log(prop_name, name, "Already defined", true);
+ 		return MDADM_STATUS_ERROR;
+ 	}
+ 
+-	ret = ident_check_name(name, prop_name, true);
+-	if (ret)
+-		return ret;
++	if (!is_string_lq(name, MD_NAME_MAX + 1)) {
++		ident_log(prop_name, name, "Too long or empty", true);
++		return MDADM_STATUS_ERROR;
++	}
+ 
+ 	snprintf(ident->name, MD_NAME_MAX + 1, "%s", name);
+ 	return MDADM_STATUS_SUCCESS;
+diff --git a/mdadm.8.in b/mdadm.8.in
+index 452555216644..2a71e32237d4 100644
+--- a/mdadm.8.in
++++ b/mdadm.8.in
+@@ -884,10 +884,8 @@ are used to add different devices).
+ .BR \-N ", " \-\-name=
+ Set a
+ .B name
+-for the array. It must be
+-.BR "POSIX PORTABLE NAME"
+-compatible and cannot be longer than 32 chars. This is effective when creating an array
+-with a v1 metadata, or an external array.
++for the array. It cannot be longer than 32 chars. This is effective when
++creating an array with a v1 metadata, or an external array.
+ 
+ If name is needed but not specified, it is taken from the basename of the device
+ that is being created. See
+@@ -1024,11 +1022,9 @@ is much safer.
+ 
+ .TP
+ .BR \-N ", " \-\-name=
+-Specify the name of the array to assemble. It must be
+-.BR "POSIX PORTABLE NAME"
+-compatible and cannot be longer than 32 chars. This must be the name
+-that was specified when creating the array. It must either match
+-the name stored in the superblock exactly, or it must match
++Specify the name of the array to assemble. It cannot be longer than 32 chars.
++This must be the name that was specified when creating the array. It must
++either match the name stored in the superblock exactly, or it must match
+ with the current
+ .I homehost
+ prefixed to the start of the given name.
+@@ -2236,10 +2232,8 @@ and
+ 
+ The
+ .B name
+-option updates the subarray name in the metadata. It must be
+-.BR "POSIX PORTABLE NAME"
+-compatible and cannot be longer than 32 chars. If successes, new value will be respected after
+-next assembly.
++option updates the subarray name in the metadata. It cannot be longer than
++32 chars. If successes, new value will be respected after next assembly.
+ 
+ The
+ .B ppl
+@@ -3214,9 +3208,7 @@ can be given, or just the suffix of the second sort of name, such as
+ .I home
+ can be given.
+ 
+-In every style, raw name must be compatible with
+-.BR "POSIX PORTABLE NAME"
+-and has to be no longer than 32 chars.
++In every style, raw name has to be no longer than 32 chars.
+ 
+ When
+ .I mdadm
+diff --git a/super-intel.c b/super-intel.c
+index 4fbbc98d915c..40519f8fce2a 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -5630,6 +5630,17 @@ static bool imsm_is_name_allowed(struct intel_super *super, const char * const n
+ 		return false;
+ 	}
+ 
++	if (name[0] == '.') {
++		pr_vrb("imsm: Name \"%s\" has forbidden leading dot", name);
++		return false;
++	}
++
++	if (is_name_posix_compatible(name) == false) {
++		pr_vrb("imsm: Name \"%s\" doesn't follow POSIX portable file name character set",
++		       name);
++		return false;
++	}
++
+ 	for (i = 0; i < mpb->num_raid_devs; i++) {
+ 		struct imsm_dev *dev = get_imsm_dev(super, i);
+ 
+diff --git a/tests/00confnames b/tests/00confnames
+index 191a905f3379..db22fa1a5035 100644
+--- a/tests/00confnames
++++ b/tests/00confnames
+@@ -4,6 +4,10 @@ set -x -e
+ # Test how <devname> is handled during Incremental assemblation with
+ # config file and ARRAYLINE specified.
+ 
++# for native, mdadm is not limiting or checking the set of ASCI symbols that
++# can be used. It is up to user to use symbols that are not conflicting with
++# system utilities. Any problem is this area is not mdadm issue.
++
+ names_create "/dev/md/name"
+ local _UUID="$(mdadm -D --export /dev/md127 | grep MD_UUID | cut -d'=' -f2)"
+ [[ "$_UUID" == "" ]] && echo "Cannot obtain UUID for $DEVNODE_NAME" && exit 1
+@@ -41,14 +45,7 @@ mdadm -I $dev0 --config=$config
+ names_verify "/dev/md4" "empty" "name"
+ mdadm -S "/dev/md4"
+ 
+-# 6. <devname> with some special symbols and locales.
+-# <devname> should be ignored.
+-names_make_conf $_UUID "tźż-\.,<>st+-" $config
+-mdadm -I $dev0 --config=$config
+-names_verify "/dev/md127" "name" "name"
+-mdadm -S "/dev/md127"
+-
+-# 7. No <devname> set.
++# 6. No <devname> set.
+ # Metadata name and default node used.
+ names_make_conf $_UUID "empty" $config
+ mdadm -I $dev0 --config=$config
+-- 
+2.50.1
+

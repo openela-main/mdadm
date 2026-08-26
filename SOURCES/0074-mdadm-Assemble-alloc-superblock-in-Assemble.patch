@@ -1,0 +1,210 @@
+From 6fa6c4b915f6bc024cf481d137569a255001a84a Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Mon, 27 Oct 2025 08:15:38 +0800
+Subject: [PATCH 74/74] mdadm/Assemble: alloc superblock in Assemble
+
+Now it allocs superblock outside Assemble and frees the memory outside
+Assemble. But the memory can be freed and realloc in Assemble. So freed
+memory will be dereferenced outside Assemble. This patch moves the memory
+management into Assemble. So it's more safe and the input arguments is
+less.
+
+This can be reproduced by:
+mdadm -CR /dev/md0 -l1 -n2 /dev/loop0 /dev/loop1 --assume-clean
+mdadm -Ss
+mdadm -A -e 1.2 /dev/md0 /dev/loop0 /dev/loop1
+
+Signed-off-by: Xiao Ni <xni@redhat.com>
+---
+ Assemble.c | 47 ++++++++++++++++++++++++++++++++++-------------
+ mdadm.c    | 12 +++++++-----
+ mdadm.h    |  7 +++----
+ 3 files changed, 44 insertions(+), 22 deletions(-)
+
+diff --git a/Assemble.c b/Assemble.c
+index 1949bf96c478..cfe01ee237bb 100644
+--- a/Assemble.c
++++ b/Assemble.c
+@@ -1308,10 +1308,8 @@ static int start_array(int mdfd,
+ 	return 1;
+ }
+ 
+-int Assemble(struct supertype *st, char *mddev,
+-	     struct mddev_ident *ident,
+-	     struct mddev_dev *devlist,
+-	     struct context *c)
++int Assemble(char *mddev, struct mddev_ident *ident,
++	     struct mddev_dev *devlist, struct context *c)
+ {
+ 	/*
+ 	 * The task of Assemble is to find a collection of
+@@ -1398,6 +1396,7 @@ int Assemble(struct supertype *st, char *mddev,
+ 	char chosen_name[1024];
+ 	struct map_ent *map = NULL;
+ 	struct map_ent *mp;
++	struct supertype *st = NULL;
+ 
+ 	/*
+ 	 * If any subdevs are listed, then any that don't
+@@ -1418,6 +1417,15 @@ int Assemble(struct supertype *st, char *mddev,
+ 		return 1;
+ 	}
+ 
++	if (c->metadata) {
++		for (i = 0; !st && superlist[i]; i++)
++			st = superlist[i]->match_metadata_desc(c->metadata);
++		if (!st) {
++			pr_err("unrecognised metadata identifier: %s\n", c->metadata);
++			return -EINVAL;
++		}
++	}
++
+ 	if (devlist == NULL)
+ 		devlist = conf_get_devs();
+ 	else if (mddev)
+@@ -1439,11 +1447,15 @@ try_again:
+ 		st->ignore_hw_compat = 1;
+ 	num_devs = select_devices(devlist, ident, &st, &content, c,
+ 				  inargv, auto_assem);
+-	if (num_devs < 0)
+-		return 1;
++	if (num_devs < 0) {
++		rv = 1;
++		goto free_st;
++	}
+ 
+-	if (!st || !st->sb || !content)
+-		return 2;
++	if (!st || !st->sb || !content) {
++		rv = 2;
++		goto free_st;
++	}
+ 
+ 	/* We have a full set of devices - we now need to find the
+ 	 * array device.
+@@ -1574,12 +1586,11 @@ try_again:
+ 
+ 	if (content != &info) {
+ 		/* This is a member of a container.  Try starting the array. */
+-		int err;
+-		err = assemble_container_content(st, mdfd, content, c,
++		rv = assemble_container_content(st, mdfd, content, c,
+ 						 chosen_name, NULL);
+ 		close(mdfd);
+ 		sysfs_free(pre_exist);
+-		return err;
++		goto free_st;
+ 	}
+ 
+ 	/* Ok, no bad inconsistancy, we can try updating etc */
+@@ -1937,10 +1948,20 @@ out:
+ 	/* '2' means 'OK, but not started yet' */
+ 	if (rv == -1) {
+ 		free(devices);
+-		return 1;
++		rv = 1;
++		goto free_st;
+ 	}
+ 	close(mdfd);
+-	return rv == 2 ? 0 : rv;
++
++	if (rv == 2)
++		rv = 0;
++free_st:
++	if (st) {
++		st->ss->free_super(st);
++		free(st);
++	}
++
++	return rv;
+ }
+ 
+ int assemble_container_content(struct supertype *st, int mdfd,
+diff --git a/mdadm.c b/mdadm.c
+index 14649a40c236..18ded25ee79d 100644
+--- a/mdadm.c
++++ b/mdadm.c
+@@ -107,6 +107,7 @@ int main(int argc, char *argv[])
+ 	int grow_continue = 0;
+ 	struct context c = {
+ 		.require_homehost = 1,
++		.metadata = NULL,
+ 	};
+ 	struct shape s = {
+ 		.journaldisks	= 0,
+@@ -445,6 +446,7 @@ int main(int argc, char *argv[])
+ 				pr_err("unrecognised metadata identifier: %s\n", optarg);
+ 				exit(2);
+ 			}
++			c.metadata = optarg;
+ 			continue;
+ 
+ 		case O(MANAGE,'W'):
+@@ -1424,10 +1426,10 @@ int main(int argc, char *argv[])
+ 				if (mdfd >= 0)
+ 					close(mdfd);
+ 			} else {
+-				rv |= Assemble(ss, ident.devname, array_ident, NULL, &c);
++				rv |= Assemble(ident.devname, array_ident, NULL, &c);
+ 			}
+ 		} else if (!c.scan)
+-			rv = Assemble(ss, ident.devname, &ident, devlist->next, &c);
++			rv = Assemble(ident.devname, &ident, devlist->next, &c);
+ 		else if (devs_found > 0) {
+ 			if (c.update && devs_found > 1) {
+ 				pr_err("can only update a single array at a time\n");
+@@ -1445,7 +1447,7 @@ int main(int argc, char *argv[])
+ 					rv |= 1;
+ 					continue;
+ 				}
+-				rv |= Assemble(ss, dv->devname, array_ident, NULL, &c);
++				rv |= Assemble(dv->devname, array_ident, NULL, &c);
+ 			}
+ 		} else {
+ 			if (c.update) {
+@@ -1737,7 +1739,7 @@ static int scan_assemble(struct supertype *ss,
+ 			if (a->devname && is_devname_ignore(a->devname) == true)
+ 				continue;
+ 
+-			r = Assemble(ss, a->devname,
++			r = Assemble(a->devname,
+ 				     a, NULL, c);
+ 			if (r == 0) {
+ 				a->assembled = 1;
+@@ -1760,7 +1762,7 @@ static int scan_assemble(struct supertype *ss,
+ 			struct mddev_dev *devlist = conf_get_devs();
+ 			acnt = 0;
+ 			do {
+-				rv2 = Assemble(ss, NULL,
++				rv2 = Assemble(NULL,
+ 					       ident,
+ 					       devlist, c);
+ 				if (rv2 == 0) {
+diff --git a/mdadm.h b/mdadm.h
+index 7dcb20ed1f34..56925cf863f1 100644
+--- a/mdadm.h
++++ b/mdadm.h
+@@ -638,6 +638,7 @@ struct context {
+ 	char	*action;
+ 	int	nodes;
+ 	char	*homecluster;
++	char	*metadata;
+ };
+ 
+ struct shape {
+@@ -1516,10 +1517,8 @@ extern int restore_backup(struct supertype *st,
+ 			  int verbose);
+ extern int Grow_continue_command(char *devname, int fd, struct context *c);
+ 
+-extern int Assemble(struct supertype *st, char *mddev,
+-		    struct mddev_ident *ident,
+-		    struct mddev_dev *devlist,
+-		    struct context *c);
++extern int Assemble(char *mddev, struct mddev_ident *ident,
++			struct mddev_dev *devlist, struct context *c);
+ 
+ extern int Build(struct mddev_ident *ident, struct mddev_dev *devlist, struct shape *s,
+ 		 struct context *c);
+-- 
+2.50.1
+

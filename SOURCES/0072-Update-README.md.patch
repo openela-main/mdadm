@@ -1,0 +1,28 @@
+From 868376e030349417bc6c858dec565ae0d9808b60 Mon Sep 17 00:00:00 2001
+From: Guilherme Ferreira <16529503+piradata@users.noreply.github.com>
+Date: Sat, 25 Oct 2025 20:15:53 -0300
+Subject: [PATCH 72/74] Update README.md
+
+just updated the link to the new one, the old pointed to an archive page
+
+Signed-off-by: Guilherme Ferreira <16529503+piradata@users.noreply.github.com>
+---
+ README.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/README.md b/README.md
+index ba611ec5fb7b..9289f50ac776 100644
+--- a/README.md
++++ b/README.md
+@@ -1,7 +1,7 @@
+ **mdadm** is a utility used to create and manage **software RAID** devices implemented through
+ **Multiple devices driver (MD)** in kernel. It supports following RAID metadata formats:
+ 
+-* [Linux native RAID](https://raid.wiki.kernel.org/index.php/RAID_superblock_formats):
++* [Linux native RAID](https://docs.kernel.org/admin-guide/md.html#superblock-formats):
+ 
+   Known as **native** or **native RAID**. First and default metadata format. Metadata management
+   is implemented in **MD driver**.
+-- 
+2.50.1
+

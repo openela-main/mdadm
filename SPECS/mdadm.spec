@@ -2,7 +2,8 @@ Name:        mdadm
 Version:     4.4
 # extraversion is used to define rhel internal version
 %define extraversion 4
-Release:     %{extraversion}%{?dist}
+%define versionsuffix .1
+Release:     %{extraversion}%{?dist}%{?versionsuffix}
 Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 URL:         https://git.kernel.org/pub/scm/utils/mdadm/mdadm.git
 License:     GPLv2+
@@ -56,20 +57,48 @@ Patch033:    0034-Update-README.md.patch
 Patch034:    0035-mdadm-Remove-klibc-and-uclibc-support.patch
 Patch035:    0036-mdadm-include-asm-byteorder.h.patch
 Patch036:    0037-mdadm-use-kernel-raid-headers.patch
-Patch037:    mdadm-use-standard-libc-nftw.patch
-Patch038:    0038-mdadm-enable-sync-file-for-udev-rules.patch
-Patch039:    0039-mdadm-assemble-Don-t-stop-array-after-creating-it.patch
-Patch040:    0040-mdadm-incremental-set-sysfs-name-after-assembling-im.patch
-Patch041:    0041-mdadm-imsm-use-creation_time-for-ctime-in-container-.patch
-Patch042:    0042-mdadm-Create-array-with-sync-del-gendisk-mode.patch
-Patch043:    0043-mdadm-load-md_mod-first.patch
+Patch037:    0038-Update-tests.yml.patch
+Patch038:    0039-Update-tests.yml.patch
+Patch039:    0040-Update-run_mdadm_tests.sh.patch
+Patch040:    0041-tests-support-second-runner.patch
+Patch041:    0042-mdadm-allow-any-valid-minor-number-in-md-device-name.patch
+Patch042:    0043-mdadm-use-standard-libc-nftw.patch
+Patch043:    0044-mdadm-fix-building-errors.patch
+Patch044:    0045-mdadm-add-attribute-nonstring-for-signature.patch
+Patch045:    0046-mdadm-give-more-time-to-wait-sync-thread-to-reap.patch
+Patch046:    0047-mdadm-tests-mark-10ddf-fail-two-spares-broken.patch
+Patch047:    0048-mdadm-tests-mark-09imsm-assemble-broken.patch
+Patch048:    0049-mdadm-tests-mark-10ddf-fail-readd-readonly-broken.patch
+Patch049:    0050-optim-al-ize-write-indent-write-intent.patch
+Patch050:    0051-mdadm-enable-sync-file-for-udev-rules.patch
+Patch051:    0052-mdadm-remove-POSIX-check.patch
+Patch052:    0053-mdadm-assemble-Don-t-stop-array-after-creating-it.patch
+Patch053:    0054-mdmonitor-use-MAILFROM-to-set-sendmail-envelope-send.patch
+Patch054:    0055-mdadm-use-lseek-consistently.patch
+Patch055:    0056-build-deps-bump-actions-checkout-from-4-to-5.patch
+Patch056:    0057-systemd-use-Type-simple-for-mdcheck-services.patch
+Patch057:    0058-mdcheck-reset-sync_action-to-idle-when-stopped.patch
+Patch058:    0059-mdcheck-make-sure-signals-are-processed-immediately.patch
+Patch059:    0060-systemd-start-mdcheck_continue.timer-before-mdcheck_.patch
+Patch060:    0061-Fix-monitor-scan-with-relative-ARRAY-devnames.patch
+Patch061:    0062-Re-enable-mdadm-monitor-.-for-dev-mdX.patch
+Patch062:    0063-Fix-meaing-typo-in-mdadm.conf-example.patch
+Patch063:    0064-Update-raid6check-man-page.patch
+Patch064:    0065-udev-Fix-memleak.patch
+Patch065:    0066-mdadm-modify-the-order-of-free_super_xxx-to-avoid-me.patch
+Patch066:    0067-mdadm-Fix-memory-leak-issue-in-check_raid.patch
+Patch067:    0068-mdadm-Fix-memory-leak-issue-in-Manage_stop.patch
+Patch068:    0069-mdadm-Fix-memory-leak-issue-in-load_ddf_local.patch
+Patch069:    0070-mdadm-Incremental-wait-a-while-before-removing-a-mem.patch
+Patch070:    0071-mdadm-sysfs-close-fd-before-return.patch
+Patch071:    0072-Update-README.md.patch
+Patch072:    0073-mdadm-Create-array-with-sync-del-gendisk-mode.patch
+Patch073:    0074-mdadm-Assemble-alloc-superblock-in-Assemble.patch
+Patch074:    0075-imsm-Fix-UEFI-backward-compatibility-for-RAID10D4.patch
 
 # Fedora customization patches
-Patch196:    mdadm-fix-building-errors.patch
-Patch197:    mdadm-check-posix-name-before-setting-name-and-devna.patch 
 Patch200:    mdadm-udev.patch
 Patch201:    mdadm-2.5.2-static.patch
-Patch202:    mdadm-get-rhel-version.patch
 
 BuildRequires: make
 BuildRequires: systemd-rpm-macros binutils-devel gcc systemd-devel
@@ -143,13 +172,15 @@ install -m644 %{SOURCE5} %{buildroot}/etc/libreport/events.d
 /usr/share/mdadm/mdcheck
 
 %changelog
-* Tue Feb 10 2026 Xiao Ni <xni@redhat.com> 4.4-4
-- enable sync del mode and some booting fixes
-- Resolves RHEL-106747 RHEL-130808
+* Tue Jul 14 2026 Peter Rajnoha <prajnoha@redhat.com> 4.4-4.el9_8.1
+- Version adjustment.
 
-* Wed Nov 26 2025 Xiao Ni <xni@redhat.com> 4.4-3
-- udev change and don't stop array during assemble
-- Resolves RHEL-130808 RHEL-106747
+* Fri Jul 03 2026 Peter Rajnoha <prajnoha@redhat.com> 4.4-3.el9_8.1
+- Fix UEFI backward compatibility for IMSM RAID10.
+
+* Tue Oct 28 2025 Xiao Ni <xni@redhat.com> 4.4-3
+- Update to latest upstream
+- Resolves RHEL-100087, RHEL-107083
 
 * Mon May 19 2025 Xiao Ni <xni@redhat.com> 4.4-2
 - mdadm grow command can't work

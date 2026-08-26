@@ -1,0 +1,28 @@
+From 7cb225b4949ca63f9e8298a7feb00e04c71c7e9e Mon Sep 17 00:00:00 2001
+From: Wu Guanghao <wuguanghao3@huawei.com>
+Date: Tue, 14 Oct 2025 10:50:18 +0800
+Subject: [PATCH 67/74] mdadm: Fix memory leak issue in check_raid()
+
+check_raid() alloc for st, but did not release it when exiting.
+
+Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
+---
+ util.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/util.c b/util.c
+index 43d1c119d013..5d6fe800d666 100644
+--- a/util.c
++++ b/util.c
+@@ -693,6 +693,8 @@ int check_raid(int fd, char *name)
+ 		/* Looks like GPT or MBR */
+ 		pr_err("partition table exists on %s\n", name);
+ 	}
++
++	free(st);
+ 	return 1;
+ }
+ 
+-- 
+2.50.1
+

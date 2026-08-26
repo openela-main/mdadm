@@ -1,0 +1,50 @@
+From 8aa4ea95db3525c2d381ddf65da69ab549c814d4 Mon Sep 17 00:00:00 2001
+From: Martin Wilck <mwilck@suse.com>
+Date: Wed, 13 Aug 2025 22:12:53 +0200
+Subject: [PATCH 60/74] systemd: start mdcheck_continue.timer before
+ mdcheck_start.timer
+
+In the (unlikely but possible) case that a previously started md check
+hasn't finished on the first Sunday of the following month,
+mdcheck_start.service will start the scan from position 0, which is
+probably not desired.
+
+Have mdcheck_continue.service start first, so that it will pick up the
+check where it left off, and that the subsequent mdcheck_start.service will
+do nothing.
+
+Signed-off-by: Martin Wilck <mwilck@suse.com>
+---
+ systemd/mdcheck_continue.timer | 2 +-
+ systemd/mdcheck_start.timer    | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/systemd/mdcheck_continue.timer b/systemd/mdcheck_continue.timer
+index dba1074c1f44..0ab5d2ebecb5 100644
+--- a/systemd/mdcheck_continue.timer
++++ b/systemd/mdcheck_continue.timer
+@@ -9,7 +9,7 @@
+ Description=MD array scrubbing - continuation
+ 
+ [Timer]
+-OnCalendar= 1:05:00
++OnCalendar= 1:00:00
+ 
+ [Install]
+ WantedBy= mdmonitor.service
+diff --git a/systemd/mdcheck_start.timer b/systemd/mdcheck_start.timer
+index 9e7e02ab7333..1b8f3f20878b 100644
+--- a/systemd/mdcheck_start.timer
++++ b/systemd/mdcheck_start.timer
+@@ -9,7 +9,7 @@
+ Description=MD array scrubbing
+ 
+ [Timer]
+-OnCalendar=Sun *-*-1..7 1:00:00
++OnCalendar=Sun *-*-1..7 1:05:00
+ 
+ [Install]
+ WantedBy= mdmonitor.service
+-- 
+2.50.1
+

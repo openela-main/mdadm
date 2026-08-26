@@ -1,0 +1,60 @@
+From c425cdc9297a1f27f664b19a9d9386b43d92f7b3 Mon Sep 17 00:00:00 2001
+From: Wu Guanghao <wuguanghao3@huawei.com>
+Date: Tue, 14 Oct 2025 10:23:46 +0800
+Subject: [PATCH 66/74] mdadm: modify the order of free_super_xxx() to avoid
+ memory leak
+
+free_super_xx() should be executed at the load_super_xx() entry.
+When there are additional checks, it may lead to supertype not being
+released, resulting in a memory leak.
+
+Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
+---
+ super-ddf.c   | 4 ++--
+ super-intel.c | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/super-ddf.c b/super-ddf.c
+index f46217206437..7b38f9125134 100644
+--- a/super-ddf.c
++++ b/super-ddf.c
+@@ -1324,6 +1324,8 @@ static int load_super_ddf(struct supertype *st, int fd,
+ 	struct ddf_super *super;
+ 	int rv;
+ 
++	free_super_ddf(st);
++
+ 	if (get_dev_size(fd, devname, &dsize) == 0)
+ 		return 1;
+ 
+@@ -1345,8 +1347,6 @@ static int load_super_ddf(struct supertype *st, int fd,
+ 		return 1;
+ 	}
+ 
+-	free_super_ddf(st);
+-
+ 	if (posix_memalign((void**)&super, 512, sizeof(*super))!= 0) {
+ 		pr_err("malloc of %zu failed.\n",
+ 			sizeof(*super));
+diff --git a/super-intel.c b/super-intel.c
+index 7162327ecdf2..5a4a2eb1c949 100644
+--- a/super-intel.c
++++ b/super-intel.c
+@@ -5471,12 +5471,12 @@ static int load_super_imsm(struct supertype *st, int fd, char *devname)
+ 	int rv;
+ 	int retry;
+ 
++	free_super_imsm(st);
++
+ 	if (test_partition(fd))
+ 		/* IMSM not allowed on partitions */
+ 		return 1;
+ 
+-	free_super_imsm(st);
+-
+ 	super = alloc_super();
+ 	if (!super)
+ 		return 1;
+-- 
+2.50.1
+
