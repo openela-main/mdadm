@@ -2,7 +2,7 @@ Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 Name:        mdadm
 Version:     4.2
 # extraversion is used to define rhel internal version
-%define extraversion 19
+%define extraversion 20
 Release:     %{extraversion}%{?dist}
 Source:      http://www.kernel.org/pub/linux/utils/raid/mdadm/mdadm-%{version}%{?subversion:-%{subversion}}.tar.xz
 Source1:     mdmonitor.init
@@ -186,6 +186,7 @@ Patch168:    0169-Mdmonitor-Improve-udev-event-handling.patch
 Patch169:    0170-udev-Move-udev_block-and-udev_unblock-into-udev.c.patch
 Patch170:    0171-mdadm-enable-sync-file-for-udev-rules.patch
 Patch171:    0172-mdadm-Increase-number-limit-in-md-device-name-to-102.patch
+Patch172:    0173-mdadm-incremental-set-sysfs-name-after-assembling-im.patch
 
 # RHEL customization patches
 Patch200:    mdadm-udev.patch
@@ -281,6 +282,9 @@ rm -rf %{buildroot}
 /usr/share/mdadm/mdcheck
 
 %changelog
+* Fri Sep 04 2026 Peter Rajnoha <prajnoha@redhat.com> - 4.2-20
+- Fix 'device ready' notification for udev during container incremental assembly.
+
 * Sat Oct 25 2025 Xiao Ni <xni@redhat.com> - 4.2-19
 - alloc superblock in Assemble
 - Resolves: RHEL-82267
