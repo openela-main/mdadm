@@ -2,7 +2,7 @@ Name:        mdadm
 Version:     4.4
 # extraversion is used to define rhel internal version
 %define extraversion 4
-%define versionsuffix .2
+%define versionsuffix .1
 Release:     %{extraversion}%{?dist}%{?versionsuffix}
 Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 URL:         https://git.kernel.org/pub/scm/utils/mdadm/mdadm.git
@@ -173,13 +173,10 @@ install -m644 %{SOURCE5} %{buildroot}/etc/libreport/events.d
 /usr/share/mdadm/mdcheck
 
 %changelog
-* Wed Sep 09 2026 Peter Rajnoha <prajnoha@redhat.com> 4.4-4.el9_8.2
+* Fri Sep 18 2026 Peter Rajnoha <prajnoha@redhat.com> - 4.4-4.el9_9.1
 - Fix 'device ready' notification for udev during container incremental assembly.
 
-* Tue Jul 14 2026 Peter Rajnoha <prajnoha@redhat.com> 4.4-4.el9_8.1
-- Version adjustment.
-
-* Fri Jul 03 2026 Peter Rajnoha <prajnoha@redhat.com> 4.4-3.el9_8.1
+* Thu Jul 02 2026 Peter Rajnoha <prajnoha@redhat.com> - 4.4-4
 - Fix UEFI backward compatibility for IMSM RAID10.
 
 * Tue Oct 28 2025 Xiao Ni <xni@redhat.com> 4.4-3
