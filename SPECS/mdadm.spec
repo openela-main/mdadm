@@ -4,7 +4,8 @@ Name:        mdadm
 Version:     4.4
 # extraversion is used to define rhel internal version
 %define extraversion 4
-Release:     %{extraversion}%{?dist}
+%define versionsuffix .1
+Release:     %{extraversion}%{?dist}%{?versionsuffix}
 Summary:     The mdadm program controls Linux md devices (software RAID arrays)
 URL:         https://git.kernel.org/pub/scm/utils/mdadm/mdadm.git
 License:     GPLv2+
@@ -96,6 +97,7 @@ Patch071:    0072-Update-README.md.patch
 Patch072:    0073-mdadm-Create-array-with-sync-del-gendisk-mode.patch
 Patch073:    0074-mdadm-Assemble-alloc-superblock-in-Assemble.patch
 Patch074:    0075-imsm-Fix-UEFI-backward-compatibility-for-RAID10D4.patch
+Patch075:    0076-mdadm-incremental-set-sysfs-name-after-assembling-im.patch
 
 # Fedora customization patches
 Patch197:    mdadm-udev.patch
@@ -179,6 +181,9 @@ install -m644 %{SOURCE5} %{buildroot}/etc/libreport/events.d
 /usr/share/mdadm/mdcheck
 
 %changelog
+* Wed Sep 23 2026 Peter Rajnoha <prajnoha@redhat.com> - 4.4-4.el10_3.1
+- Fix 'device ready' notification for udev during container incremental assembly.
+
 * Thu Jul 02 2026 Peter Rajnoha <prajnoha@redhat.com> - 4.4-4
 - Fix UEFI backward compatibility for IMSM RAID10.
 

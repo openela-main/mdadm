@@ -1,0 +1,41 @@
+From 43d5b7866827ccb645d5eaa92aeba96fa85571c6 Mon Sep 17 00:00:00 2001
+From: Xiao Ni <xni@redhat.com>
+Date: Sun, 25 Jan 2026 16:50:58 +0800
+Subject: [PATCH] mdadm/incremental: set sysfs name after assembling imsm array
+
+The sysfs name is not set after assembling imsm array. So sysfs_uevent
+can't send the change event. The raid device's state depends on the
+genuine events from the kernel. If the kernel geniune event is sent
+after udev_unblock, the raid can be ready on time. Then the it can be
+mounted during boot rightly. If the kernel geniune event is sent
+before udev_unblock, the mount will fail during boot.
+
+Signed-off-by: <xni@redhat.com>
+---
+ Incremental.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/Incremental.c b/Incremental.c
+index b05a52f6..28f95a7d 100644
+--- a/Incremental.c
++++ b/Incremental.c
+@@ -1528,6 +1528,7 @@ static int Incremental_container(struct supertype *st, char *devname,
+ 	for (ra = list ; ra ; ra = ra->next) {
+ 		int mdfd = -1;
+ 		char chosen_name[1024];
++		char *sysname;
+ 		struct map_ent *mp;
+ 		struct mddev_ident *match = NULL;
+ 
+@@ -1620,6 +1621,8 @@ static int Incremental_container(struct supertype *st, char *devname,
+ 					   chosen_name, &result);
+ 		map_free(map);
+ 		map = NULL;
++		sysname = fd2devnm(mdfd);
++		strncpy(info.sys_name, sysname, sizeof(sysname) - 1);
+ 		close_fd(&mdfd);
+ 		udev_unblock();
+ 		sysfs_uevent(&info, "change");
+-- 
+2.55.0
+
